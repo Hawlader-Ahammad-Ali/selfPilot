@@ -1,77 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:background="@color/background_dark"
     android:gravity="center"
-    android:padding="16dp">
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Focus Session"
+        android:textColor="@color/text_secondary"
+        android:textSize="18sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tvTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginVertical="24dp"
         android:text="25:00"
+        android:textColor="@color/purple_accent_light"
         android:textSize="80sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="32dp"/>
+        android:textStyle="bold" />
 
     <RadioGroup
         android:id="@+id/rgPresets"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="32dp">
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal">
 
         <RadioButton
             android:id="@+id/rb25Min"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="25 min"
+            android:layout_marginEnd="12dp"
             android:checked="true"
-            android:layout_marginEnd="16dp"/>
+            android:text="25 min"
+            android:textColor="@color/text_primary" />
 
         <RadioButton
             android:id="@+id/rb50Min"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="50 min"/>
+            android:layout_marginEnd="12dp"
+            android:text="50 min"
+            android:textColor="@color/text_primary" />
+
+        <RadioButton
+            android:id="@+id/rbCustomMin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Custom"
+            android:textColor="@color/text_primary" />
     </RadioGroup>
+
+    <LinearLayout
+        android:id="@+id/layoutCustomInput"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Custom Minutes:"
+            android:textColor="@color/text_secondary" />
+
+        <EditText
+            android:id="@+id/etCustomMinutes"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:hint="15"
+            android:inputType="number"
+            android:maxLength="3"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary" />
+
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="16dp">
+        android:orientation="horizontal">
 
         <Button
             android:id="@+id/btnStart"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Start"
-            android:layout_marginEnd="16dp"/>
+            android:layout_marginEnd="12dp"
+            android:text="Start Focus" />
 
         <Button
             android:id="@+id/btnPause"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
             android:text="Pause"
-            android:visibility="gone"
-            android:layout_marginEnd="16dp"/>
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/btnResume"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
             android:text="Resume"
-            android:visibility="gone"
-            android:layout_marginEnd="16dp"/>
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/btnCancel"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Cancel"
-            android:visibility="gone"/>
+            android:visibility="gone" />
 
     </LinearLayout>
 

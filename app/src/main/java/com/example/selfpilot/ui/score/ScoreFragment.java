@@ -13,6 +13,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.HonorScoreDao;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.util.ScoreCalculator;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 
 import java.util.Calendar;
 import java.util.concurrent.ExecutorService;
@@ -20,18 +21,24 @@ import java.util.concurrent.Executors;
 
 public class ScoreFragment extends Fragment {
 
+    private TextView tvHonorLevel;
+    private TextView tvStreak;
     private TextView tvDisciplineScore;
     private TextView tvStudyPoints;
     private TextView tvMotivationalText;
+    private LinearProgressIndicator progressDiscipline;
     private ExecutorService executorService;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_score, container, false);
+        tvHonorLevel = view.findViewById(R.id.tvHonorLevel);
+        tvStreak = view.findViewById(R.id.tvStreak);
         tvDisciplineScore = view.findViewById(R.id.tvDisciplineScore);
         tvStudyPoints = view.findViewById(R.id.tvStudyPoints);
         tvMotivationalText = view.findViewById(R.id.tvMotivationalText);
+        progressDiscipline = view.findViewById(R.id.progressDiscipline);
         executorService = Executors.newSingleThreadExecutor();
         return view;
     }
@@ -61,18 +68,27 @@ public class ScoreFragment extends Fragment {
 
             if (getActivity() != null && score != null) {
                 getActivity().runOnUiThread(() -> {
+                    if (tvHonorLevel != null) {
+                        tvHonorLevel.setText(score.getHonorLevel());
+                    }
+                    if (tvStreak != null) {
+                        tvStreak.setText(score.getStreak() + " Day" + (score.getStreak() == 1 ? "" : "s"));
+                    }
                     tvDisciplineScore.setText(String.valueOf(score.getDisciplineScore()));
-                    tvStudyPoints.setText(String.valueOf(score.getStudyPoints()));
+                    tvStudyPoints.setText(score.getStudyPoints() + " pts");
+                    if (progressDiscipline != null) {
+                        progressDiscipline.setProgress(Math.min(100, Math.max(0, score.getDisciplineScore())));
+                    }
                     
                     String motivation;
                     if (score.getDisciplineScore() >= 90) {
-                        motivation = "Excellent discipline! Keep up the great work!";
+                        motivation = "Master level discipline! Keep up the brilliant work!";
                     } else if (score.getDisciplineScore() >= 70) {
-                        motivation = "Good job! Stay focused.";
+                        motivation = "Great consistency! You're staying focused.";
                     } else if (score.getDisciplineScore() >= 50) {
-                        motivation = "You can do better. Try to reduce distractions.";
+                        motivation = "Fair discipline. Try minimizing distracting apps.";
                     } else {
-                        motivation = "Stay focused! Don't let distractions ruin your day.";
+                        motivation = "Refocus your day! Limit distractions to boost your score.";
                     }
                     tvMotivationalText.setText(motivation);
                 });

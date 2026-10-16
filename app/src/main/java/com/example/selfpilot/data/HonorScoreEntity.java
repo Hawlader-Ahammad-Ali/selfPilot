@@ -12,6 +12,8 @@ public class HonorScoreEntity {
     private long date;
     private int studyPoints;
     private int disciplineScore;
+    private int streak;
+    private String honorLevel;
 
     public int getId() {
         return id;
@@ -43,5 +45,21 @@ public class HonorScoreEntity {
 
     public void setDisciplineScore(int disciplineScore) {
         this.disciplineScore = disciplineScore;
+    }
+
+    public int getStreak() {
+        return streak;
+    }
+
+    public void setStreak(int streak) {
+        this.streak = streak;
+    }
+
+    public String getHonorLevel() {
+        return honorLevel != null ? honorLevel : "Beginner";
+    }
+
+    public void setHonorLevel(String honorLevel) {
+        this.honorLevel = honorLevel;
     }
 }

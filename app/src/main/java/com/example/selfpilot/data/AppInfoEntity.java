@@ -14,9 +14,21 @@ public class AppInfoEntity {
 
     public boolean isStudyApp;
 
+    public String category; // "Study", "Productivity", "Communication", "Social Media", "Entertainment", "Games", "Other"
+
+    public int dailyLimitMinutes; // 0 = unlimited
+
+    public boolean isFrozen;
+
+    public boolean isBlocked;
+
     public AppInfoEntity(@NonNull String packageName, String appName, boolean isStudyApp) {
         this.packageName = packageName;
         this.appName = appName;
         this.isStudyApp = isStudyApp;
+        this.category = isStudyApp ? "Study" : "Other";
+        this.dailyLimitMinutes = 0;
+        this.isFrozen = false;
+        this.isBlocked = false;
     }
 }
