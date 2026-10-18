@@ -53,6 +53,10 @@ dependencies {
     // WorkManager
     implementation(libs.work.runtime)
     
+    // Shizuku
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

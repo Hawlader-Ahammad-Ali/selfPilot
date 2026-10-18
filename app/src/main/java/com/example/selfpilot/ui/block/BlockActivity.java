@@ -1,14 +1,19 @@
 package com.example.selfpilot.ui.block;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
+import android.view.View;
 import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.EmergencyUnlockEntity;
+import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
 import java.util.Calendar;
@@ -18,6 +23,8 @@ public class BlockActivity extends AppCompatActivity {
     private String targetPackageName;
     private AppDatabase db;
     private Button btnEmergencyUnlock;
+    private Button btnForceStop;
+    private TextView tvBlockedMessage;
     private EmergencyUnlockEntity todayUnlockEntity;
 
     @Override
@@ -38,16 +45,33 @@ public class BlockActivity extends AppCompatActivity {
         });
 
         btnEmergencyUnlock = findViewById(R.id.btn_emergency_unlock);
-        
-        loadEmergencyUnlockState();
+        btnForceStop = findViewById(R.id.btn_force_stop);
+        tvBlockedMessage = findViewById(R.id.tvBlockedMessage);
 
-        btnEmergencyUnlock.setOnClickListener(v -> {
-            performEmergencyUnlock();
+        loadStateAndDetermineMode();
+
+        btnEmergencyUnlock.setOnClickListener(v -> performEmergencyUnlock());
+        
+        btnForceStop.setOnClickListener(v -> {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + targetPackageName));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
         });
     }
 
-    private void loadEmergencyUnlockState() {
+    private void loadStateAndDetermineMode() {
         new Thread(() -> {
+            boolean isFrozen = false;
+            if (targetPackageName != null) {
+                FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
+                if (frozenApp != null && frozenApp.isFrozen) {
+                    isFrozen = true;
+                }
+            }
+
+            final boolean finalIsFrozen = isFrozen;
+
             long todayStart = getTodayStart();
             todayUnlockEntity = db.emergencyUnlockDao().getUnlockByDate(todayStart);
             if (todayUnlockEntity == null) {
@@ -58,17 +82,23 @@ public class BlockActivity extends AppCompatActivity {
                 todayUnlockEntity = db.emergencyUnlockDao().getUnlockByDate(todayStart);
             }
 
-            if (todayUnlockEntity.unlocksUsed < 3) {
-                runOnUiThread(() -> {
+            runOnUiThread(() -> {
+                if (finalIsFrozen) {
+                    tvBlockedMessage.setText("This application is currently FROZEN.");
+                    btnForceStop.setVisibility(View.VISIBLE);
+                } else {
+                    tvBlockedMessage.setText("This app is restricted by SelfPilot.");
+                    btnForceStop.setVisibility(View.GONE);
+                }
+
+                if (todayUnlockEntity.unlocksUsed < 3) {
                     btnEmergencyUnlock.setEnabled(true);
                     btnEmergencyUnlock.setText("Emergency Unlock (" + (3 - todayUnlockEntity.unlocksUsed) + " left)");
-                });
-            } else {
-                runOnUiThread(() -> {
+                } else {
                     btnEmergencyUnlock.setEnabled(false);
                     btnEmergencyUnlock.setText("No Unlocks Left Today");
-                });
-            }
+                }
+            });
         }).start();
     }
 

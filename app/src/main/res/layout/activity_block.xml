@@ -1,32 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/background_dark"
     android:gravity="center"
     android:orientation="vertical"
     android:padding="32dp">
 
+    <ImageView
+        android:id="@+id/ivBlockedIcon"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginBottom="24dp"
+        android:contentDescription="Blocked Icon"
+        android:src="@android:drawable/ic_secure"
+        app:tint="@color/error_red" />
+
     <TextView
+        android:id="@+id/tvBlockedMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="This app is restricted by SelfPilot."
-        android:textSize="20sp"
-        android:textColor="@android:color/black"
         android:gravity="center"
-        android:layout_marginBottom="24dp"/>
+        android:layout_marginBottom="32dp"
+        android:text="This app is restricted by SelfPilot."
+        android:textColor="@color/text_primary"
+        android:textSize="20sp"
+        android:textStyle="bold" />
 
     <Button
         android:id="@+id/btn_go_home"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
         android:layout_marginBottom="16dp"
         android:text="Go Home" />
 
     <Button
         android:id="@+id/btn_emergency_unlock"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Emergency Unlock"
-        android:enabled="false" />
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginBottom="16dp"
+        android:enabled="false"
+        android:text="Emergency Unlock" />
+
+    <Button
+        android:id="@+id/btn_force_stop"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="True Freeze (Force Stop)"
+        android:textColor="@color/error_red"
+        android:visibility="gone" />
 
 </LinearLayout>

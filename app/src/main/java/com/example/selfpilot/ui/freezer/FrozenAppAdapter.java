@@ -1,8 +1,11 @@
 package com.example.selfpilot.ui.freezer;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
+import android.provider.Settings;
 import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,6 +24,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.util.ShizukuUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +69,7 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
                 System.currentTimeMillis(),
                 DateUtils.MINUTE_IN_MILLIS
         );
-        holder.tvTime.setText("Frozen: " + relativeTime);
+        holder.tvTime.setText(String.format("Frozen: %s", relativeTime));
 
         try {
             Drawable icon = packageManager.getApplicationIcon(item.packageName);
@@ -75,6 +79,13 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
         }
 
         holder.btnUnfreeze.setOnClickListener(v -> confirmUnfreeze(v.getContext(), item));
+        
+        holder.btnSystemInfo.setOnClickListener(v -> {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + item.packageName));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            v.getContext().startActivity(intent);
+        });
     }
 
     private void confirmUnfreeze(Context context, FrozenAppEntity item) {
@@ -83,6 +94,11 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
                 .setMessage("Are you sure you want to unfreeze " + item.appName + "? This will restore access to launch the application.")
                 .setPositiveButton("Unfreeze", (dialog, which) -> {
                     executorService.execute(() -> {
+                        
+                        if ("SHIZUKU".equals(item.restrictionMode)) {
+                            ShizukuUtil.unfreezeApp(item.packageName);
+                        }
+
                         db.frozenAppDao().unfreezeApp(item.packageName, System.currentTimeMillis());
 
                         // Update AppInfo & RestrictionRule
@@ -119,6 +135,7 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
         TextView tvAppName;
         TextView tvTime;
         Button btnUnfreeze;
+        Button btnSystemInfo;
 
         public FrozenViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -126,6 +143,7 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
             tvAppName = itemView.findViewById(R.id.frozen_app_name);
             tvTime = itemView.findViewById(R.id.frozen_app_time);
             btnUnfreeze = itemView.findViewById(R.id.btn_unfreeze_item);
+            btnSystemInfo = itemView.findViewById(R.id.btn_system_info_item);
         }
     }
 }

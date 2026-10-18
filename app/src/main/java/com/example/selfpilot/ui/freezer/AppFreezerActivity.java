@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -23,6 +24,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.util.ShizukuUtil;
 import com.example.selfpilot.util.UsageUtil;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
@@ -39,6 +41,7 @@ public class AppFreezerActivity extends AppCompatActivity {
     private LinearLayout layoutEmptyFreezer;
     private RecyclerView rvFrozenApps;
     private ExtendedFloatingActionButton btnAddAppsToFreezer;
+    private Button btnShizukuStatus;
 
     private AppDatabase db;
     private FrozenAppAdapter adapter;
@@ -58,6 +61,7 @@ public class AppFreezerActivity extends AppCompatActivity {
         layoutEmptyFreezer = findViewById(R.id.layoutEmptyFreezer);
         rvFrozenApps = findViewById(R.id.rvFrozenApps);
         btnAddAppsToFreezer = findViewById(R.id.btnAddAppsToFreezer);
+        btnShizukuStatus = findViewById(R.id.btnShizukuStatus);
 
         db = AppDatabase.getDatabase(getApplicationContext());
         executorService = Executors.newSingleThreadExecutor();
@@ -67,10 +71,66 @@ public class AppFreezerActivity extends AppCompatActivity {
 
         setupListeners();
         loadFrozenApps();
+        showStandardModeDisclosure();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateShizukuStatus();
+    }
+
+    private void updateShizukuStatus() {
+        if (btnShizukuStatus == null) return;
+        
+        if (ShizukuUtil.hasShizukuPermission()) {
+            btnShizukuStatus.setText("Advanced Mode: ACTIVE (True Freeze)");
+            btnShizukuStatus.setTextColor(getResources().getColor(R.color.success_green, null));
+        } else {
+            btnShizukuStatus.setText("Advanced Mode: OFF (Tap to Setup Shizuku)");
+            btnShizukuStatus.setTextColor(getResources().getColor(R.color.warning_yellow, null));
+        }
+    }
+
+    private void showStandardModeDisclosure() {
+        boolean hasSeenDisclosure = getSharedPreferences("SelfPilotPrefs", MODE_PRIVATE)
+                .getBoolean("has_seen_freezer_disclosure", false);
+        
+        if (!hasSeenDisclosure) {
+            new AlertDialog.Builder(this)
+                    .setTitle("App Freezer Mode")
+                    .setMessage("SelfPilot defaults to Standard Mode, using Accessibility Services to strictly restrict app launching when frozen.\n\nTo achieve true OEM-style freezing (killing background RAM, hiding launcher icons, stopping notifications), you can enable Advanced Mode by tapping the banner at the top and granting Shizuku access.")
+                    .setPositiveButton("I Understand", (dialog, which) -> {
+                        getSharedPreferences("SelfPilotPrefs", MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("has_seen_freezer_disclosure", true)
+                                .apply();
+                    })
+                    .setCancelable(false)
+                    .show();
+        }
     }
 
     private void setupListeners() {
         btnAddAppsToFreezer.setOnClickListener(v -> showAddAppsDialog());
+
+        if (btnShizukuStatus != null) {
+            btnShizukuStatus.setOnClickListener(v -> {
+                if (ShizukuUtil.isShizukuAvailable()) {
+                    if (!ShizukuUtil.hasShizukuPermission()) {
+                        ShizukuUtil.requestShizukuPermission(1001);
+                    } else {
+                        Toast.makeText(this, "Shizuku Advanced Mode is already active.", Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Shizuku Not Found")
+                            .setMessage("Shizuku is not running or not installed. Advanced freezing (icon hiding, process killing) requires Shizuku to bridge system APIs without root. SelfPilot will continue to use Standard Mode.")
+                            .setPositiveButton("OK", null)
+                            .show();
+                }
+            });
+        }
 
         if (etSearchFreezer != null) {
             etSearchFreezer.addTextChangedListener(new TextWatcher() {
@@ -212,39 +272,49 @@ public class AppFreezerActivity extends AppCompatActivity {
     private void confirmFreezeSelectedApps(PackageManager pm, List<ApplicationInfo> selectedAppInfos) {
         new AlertDialog.Builder(this)
                 .setTitle("Confirm App Freeze")
-                .setMessage("Freeze " + selectedAppInfos.size() + " selected application(s)? Launch access will be strictly restricted until unfrozen.")
+                .setMessage("Freeze " + selectedAppInfos.size() + " selected application(s)?")
                 .setPositiveButton("Freeze Now", (dialog, which) -> {
                     executorService.execute(() -> {
                         long now = System.currentTimeMillis();
+                        boolean useShizuku = ShizukuUtil.hasShizukuPermission();
+                        
                         for (ApplicationInfo info : selectedAppInfos) {
                             String pkg = info.packageName;
                             String name = info.loadLabel(pm).toString();
 
-                            // 1. Insert/Update FrozenAppEntity
-                            FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
-                            db.frozenAppDao().insert(frozen);
+                            if (useShizuku) {
+                                boolean success = ShizukuUtil.freezeApp(pkg);
+                                if (success) {
+                                    FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
+                                    frozen.restrictionMode = "SHIZUKU";
+                                    db.frozenAppDao().insert(frozen);
+                                }
+                            } else {
+                                // Standard Mode
+                                FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
+                                frozen.restrictionMode = "STANDARD";
+                                db.frozenAppDao().insert(frozen);
 
-                            // 2. Update AppInfoEntity
-                            AppInfoEntity appInfo = db.appInfoDao().getAppInfo(pkg);
-                            if (appInfo == null) {
-                                appInfo = new AppInfoEntity(pkg, name, false);
-                            }
-                            appInfo.isFrozen = true;
-                            appInfo.isBlocked = true;
-                            db.appInfoDao().update(appInfo);
+                                AppInfoEntity appInfo = db.appInfoDao().getAppInfo(pkg);
+                                if (appInfo == null) {
+                                    appInfo = new AppInfoEntity(pkg, name, false);
+                                }
+                                appInfo.isFrozen = true;
+                                appInfo.isBlocked = true;
+                                db.appInfoDao().update(appInfo);
 
-                            // 3. Update RestrictionRuleEntity
-                            RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(pkg);
-                            if (rule == null) {
-                                rule = new RestrictionRuleEntity();
-                                rule.packageName = pkg;
+                                RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(pkg);
+                                if (rule == null) {
+                                    rule = new RestrictionRuleEntity();
+                                    rule.packageName = pkg;
+                                }
+                                rule.isBlocked = true;
+                                db.restrictionRuleDao().insert(rule);
                             }
-                            rule.isBlocked = true;
-                            db.restrictionRuleDao().insert(rule);
                         }
 
                         runOnUiThread(() -> {
-                            Toast.makeText(this, selectedAppInfos.size() + " app(s) added to Freezer.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this, selectedAppInfos.size() + " app(s) processed.", Toast.LENGTH_SHORT).show();
                             loadFrozenApps();
                         });
                     });

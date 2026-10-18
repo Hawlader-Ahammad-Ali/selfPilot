@@ -11,6 +11,14 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <Button
+            android:id="@+id/btnShizukuStatus"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="Advanced Mode: Checking..." />
+
         <!-- Top OEM Header Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
