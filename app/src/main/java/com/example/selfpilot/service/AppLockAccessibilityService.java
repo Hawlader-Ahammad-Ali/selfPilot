@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.example.selfpilot.data.AppDatabase;
+import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.ui.block.BlockActivity;
 import com.example.selfpilot.util.UsageUtil;
@@ -34,19 +35,20 @@ public class AppLockAccessibilityService extends AccessibilityService {
                 new Thread(() -> {
                     AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
                     RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
+                    FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
 
-                    if (rule == null) return;
+                    if (rule == null && frozen == null) return;
 
                     long now = System.currentTimeMillis();
-                    if (now < rule.unlockedUntil) {
+                    if (rule != null && now < rule.unlockedUntil) {
                         // Emergency unlocked
                         return;
                     }
 
-                    boolean shouldBlock = rule.isBlocked;
+                    boolean shouldBlock = (rule != null && rule.isBlocked) || (frozen != null && frozen.isFrozen);
 
                     // Check Daily Limit Exceeded
-                    if (!shouldBlock && rule.limitMinutes > 0) {
+                    if (!shouldBlock && rule != null && rule.limitMinutes > 0) {
                         Calendar calendar = Calendar.getInstance();
                         calendar.set(Calendar.HOUR_OF_DAY, 0);
                         calendar.set(Calendar.MINUTE, 0);
@@ -67,7 +69,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
                     }
 
                     // Check Scheduled Restrictions
-                    if (!shouldBlock && rule.startTimeMinutes >= 0 && rule.endTimeMinutes >= 0) {
+                    if (!shouldBlock && rule != null && rule.startTimeMinutes >= 0 && rule.endTimeMinutes >= 0) {
                         Calendar c = Calendar.getInstance();
                         int currentMins = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
                         int startMins = rule.startTimeMinutes;

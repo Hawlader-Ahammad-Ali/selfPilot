@@ -2,6 +2,7 @@ package com.example.selfpilot.ui.home;
 
 import android.app.usage.UsageStats;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -9,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,9 +22,12 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.EmergencyUnlockEntity;
 import com.example.selfpilot.data.ExamProfileEntity;
+import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.HonorScoreDao;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.ui.exam.ExamModeActivity;
+import com.example.selfpilot.ui.freezer.AppFreezerActivity;
 import com.example.selfpilot.util.ScoreCalculator;
 import com.example.selfpilot.util.UsageUtil;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
@@ -63,7 +66,7 @@ public class HomeFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
-        
+
         tvHomeStreakLevel = view.findViewById(R.id.tvHomeStreakLevel);
         tvHomeModeStatus = view.findViewById(R.id.tvHomeModeStatus);
         tvTotalScreenTime = view.findViewById(R.id.tvTotalScreenTime);
@@ -92,8 +95,14 @@ public class HomeFragment extends Fragment {
     private void setupShortcuts(View root) {
         btnShortcutApps.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_apps));
         btnShortcutFocus.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_focus));
-        btnShortcutFreezer.setOnClickListener(v -> showAppFreezerDialog());
-        btnShortcutExam.setOnClickListener(v -> showExamModeDialog());
+        btnShortcutFreezer.setOnClickListener(v -> {
+            Intent intent = new Intent(getContext(), AppFreezerActivity.class);
+            startActivity(intent);
+        });
+        btnShortcutExam.setOnClickListener(v -> {
+            Intent intent = new Intent(getContext(), ExamModeActivity.class);
+            startActivity(intent);
+        });
         btnShortcutAnalytics.setOnClickListener(v -> showAnalyticsDialog());
         btnShortcutSettings.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_settings));
     }
@@ -172,13 +181,18 @@ public class HomeFragment extends Fragment {
             String scoreVal = todayScore != null ? String.valueOf(todayScore.getDisciplineScore()) : "100";
             String pointsVal = todayScore != null ? todayScore.getStudyPoints() + " pts" : "0 pts";
 
-            // 4. Restricted Apps Count & Emergency Unlocks
+            // 4. Restricted & Frozen Apps Count
             List<RestrictionRuleEntity> rules = db.restrictionRuleDao().getAllRules();
             int restrictedCount = 0;
             if (rules != null) {
                 for (RestrictionRuleEntity r : rules) {
                     if (r.isBlocked) restrictedCount++;
                 }
+            }
+
+            List<FrozenAppEntity> frozen = db.frozenAppDao().getFrozenApps();
+            if (frozen != null) {
+                restrictedCount += frozen.size();
             }
 
             EmergencyUnlockEntity unlockEntity = db.emergencyUnlockDao().getUnlockByDate(startOfDay);
@@ -208,80 +222,6 @@ public class HomeFragment extends Fragment {
                     tvStudyPointsHome.setText(pointsVal);
                     tvRestrictedAppsHome.setText(finalRestrictedCount + " Apps");
                     tvEmergencyUnlocksHome.setText(finalRemainingUnlocks + " / 3 Left");
-                });
-            }
-        });
-    }
-
-    private void showAppFreezerDialog() {
-        if (getContext() == null) return;
-        executorService.execute(() -> {
-            AppDatabase db = AppDatabase.getDatabase(getContext());
-            List<AppInfoEntity> apps = db.appInfoDao().getAllApps();
-            StringBuilder sb = new StringBuilder();
-            int frozenCount = 0;
-            for (AppInfoEntity app : apps) {
-                if (app.isFrozen) {
-                    frozenCount++;
-                    sb.append("• ").append(app.appName).append("\n");
-                }
-            }
-
-            String msg = frozenCount > 0
-                    ? "Frozen Applications (" + frozenCount + "):\n\n" + sb.toString() + "\nManage frozen apps in the Apps tab."
-                    : "No applications currently frozen.\n\nYou can freeze distracting apps from the Apps tab.";
-
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    new AlertDialog.Builder(requireContext())
-                            .setTitle("App Freezer")
-                            .setMessage(msg)
-                            .setPositiveButton("Go To Apps", (d, w) -> {
-                                View view = getView();
-                                if (view != null) {
-                                    Navigation.findNavController(view).navigate(R.id.navigation_apps);
-                                }
-                            })
-                            .setNegativeButton("Close", null)
-                            .show();
-                });
-            }
-        });
-    }
-
-    private void showExamModeDialog() {
-        if (getContext() == null) return;
-        executorService.execute(() -> {
-            AppDatabase db = AppDatabase.getDatabase(getContext());
-            ExamProfileEntity active = db.examProfileDao().getActiveExam();
-
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-                    builder.setTitle("Exam Mode Configuration");
-
-                    if (active != null && active.isActive) {
-                        builder.setMessage("Active Exam: " + active.examName + "\nDaily Goal: " + active.dailyGoalMinutes + " mins study\n\nExam Mode enforces strict restrictions on distracting applications.");
-                        builder.setNegativeButton("Deactivate Exam Mode", (d, w) -> {
-                            executorService.execute(() -> {
-                                db.examProfileDao().deactivateAllExams();
-                                updateDashboard();
-                            });
-                        });
-                        builder.setPositiveButton("Close", null);
-                    } else {
-                        builder.setMessage("No active exam profile.\n\nActivating Exam Mode applies heightened discipline rules and restricts entertainment apps during exam prep.");
-                        builder.setPositiveButton("Activate Mock Exam", (d, w) -> {
-                            executorService.execute(() -> {
-                                db.examProfileDao().deactivateAllExams();
-                                ExamProfileEntity mock = new ExamProfileEntity("Final Examinations", System.currentTimeMillis(), System.currentTimeMillis() + 7 * 86400000L, 180, true);
-                                db.examProfileDao().insert(mock);
-                                updateDashboard();
-                            });
-                        });
-                        builder.setNegativeButton("Cancel", null);
-                    }
-                    builder.show();
                 });
             }
         });

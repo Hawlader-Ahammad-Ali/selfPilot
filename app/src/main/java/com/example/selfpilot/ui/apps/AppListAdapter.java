@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
+import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
@@ -152,6 +153,13 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
             int finalLimit = limit;
             executorService.execute(() -> {
                 db.appInfoDao().update(appInfo);
+
+                if (isFrozen) {
+                    FrozenAppEntity frozen = new FrozenAppEntity(appInfo.packageName, appInfo.appName, true, System.currentTimeMillis());
+                    db.frozenAppDao().insert(frozen);
+                } else {
+                    db.frozenAppDao().unfreezeApp(appInfo.packageName, System.currentTimeMillis());
+                }
 
                 RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(appInfo.packageName);
                 if (rule == null) {

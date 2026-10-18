@@ -23,6 +23,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.ui.exam.ExamModeActivity;
+import com.example.selfpilot.ui.freezer.AppFreezerActivity;
 import com.example.selfpilot.util.UsageUtil;
 
 import java.util.Calendar;
@@ -41,6 +42,7 @@ public class SettingsFragment extends Fragment {
     private Button btnOpenExamModeSettings;
     private Button btnExportData;
     private Button btnResetData;
+    private Button btnAppFreezerSettings;
 
     private ExecutorService executorService;
 
@@ -58,6 +60,7 @@ public class SettingsFragment extends Fragment {
         btnOpenExamModeSettings = view.findViewById(R.id.btnOpenExamModeSettings);
         btnExportData = view.findViewById(R.id.btnExportData);
         btnResetData = view.findViewById(R.id.btnResetData);
+        btnAppFreezerSettings = view.findViewById(R.id.btnAppFreezerSettings); // we will add this button
 
         executorService = Executors.newSingleThreadExecutor();
 
@@ -96,6 +99,13 @@ public class SettingsFragment extends Fragment {
             startActivity(intent);
         });
 
+        if (btnAppFreezerSettings != null) {
+            btnAppFreezerSettings.setOnClickListener(v -> {
+                Intent intent = new Intent(getContext(), AppFreezerActivity.class);
+                startActivity(intent);
+            });
+        }
+
         btnExportData.setOnClickListener(v -> exportDataJSON());
 
         btnResetData.setOnClickListener(v -> resetAppData());
@@ -119,14 +129,13 @@ public class SettingsFragment extends Fragment {
 
         boolean usageGranted = UsageUtil.hasUsageStatsPermission(getContext());
         if (usageGranted) {
-            tvUsagePermissionStatus.setText("Usage Access: Granted (Active)");
+            tvUsagePermissionStatus.setText(getString(R.string.usage_granted));
             tvUsagePermissionStatus.setTextColor(getResources().getColor(R.color.success_green, null));
         } else {
-            tvUsagePermissionStatus.setText("Usage Access: Not Granted (Tap button below)");
+            tvUsagePermissionStatus.setText(getString(R.string.usage_denied));
             tvUsagePermissionStatus.setTextColor(getResources().getColor(R.color.warning_yellow, null));
         }
 
-        // Accessibility service check
         tvAccessibilityStatus.setText("App Lock Accessibility: Configured via Settings");
         tvAccessibilityStatus.setTextColor(getResources().getColor(R.color.electric_blue, null));
     }

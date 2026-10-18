@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">selfPilot</string>
+    <string name="app_name">SelfPilot</string>
+    <string name="usage_granted">Usage Access: Granted (Active)</string>
+    <string name="usage_denied">Usage Access: Not Granted (Tap button below)</string>
 </resources>
