@@ -5,17 +5,19 @@ import android.content.Context;
 
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
+import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
 import java.util.Calendar;
+import java.util.List;
 import java.util.Map;
 
 public class RestrictionChecker {
 
     /**
-     * Checks if a package is currently restricted according to its freeze state, limit, schedule, or Focus Mode.
+     * Checks if a package is currently restricted according to its freeze state, limit, schedule, Focus Mode, or Exam Mode.
      * Note: This method accesses the database and should be called from a background thread.
      */
     public static boolean isAppRestricted(Context context, String packageName) {
@@ -26,7 +28,9 @@ public class RestrictionChecker {
                 packageName.equals("android") ||
                 packageName.equals("com.android.systemui") ||
                 packageName.contains("launcher") ||
-                packageName.contains("settings")) {
+                packageName.contains("settings") ||
+                packageName.contains("dialer") ||
+                packageName.contains("incall")) {
             return false;
         }
 
@@ -41,6 +45,24 @@ public class RestrictionChecker {
         }
 
         boolean shouldBlock = (rule != null && rule.isBlocked) || (frozen != null && frozen.isFrozen);
+
+        // Check Exam Mode logic
+        // "If any active schedule restricts an app, that app remains restricted even if another active schedule allows it."
+        if (!shouldBlock) {
+            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+            if (activeExams != null && !activeExams.isEmpty()) {
+                boolean isRestrictedByAnyExam = false;
+                for (ExamProfileEntity exam : activeExams) {
+                    if (exam.restrictedAppsCsv != null && exam.restrictedAppsCsv.contains(packageName)) {
+                        isRestrictedByAnyExam = true;
+                        break;
+                    }
+                }
+                if (isRestrictedByAnyExam) {
+                    shouldBlock = true;
+                }
+            }
+        }
 
         // Check Focus Mode active
         if (!shouldBlock) {

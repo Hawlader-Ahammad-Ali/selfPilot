@@ -1,48 +1,44 @@
 package com.example.selfpilot.ui.exam;
 
 import android.app.DatePickerDialog;
-import android.app.TimePickerDialog;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.text.TextUtils;
+import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.ExamProfileEntity;
-import com.example.selfpilot.util.UsageUtil;
+import com.example.selfpilot.util.ExamScheduler;
+import com.google.android.material.card.MaterialCardView;
 
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class ExamModeActivity extends AppCompatActivity {
 
-    private EditText etExamName, etExamDailyGoal;
-    private Button btnSetStartDate, btnSetEndDate, btnSelectRestricted, btnSelectAllowed, btnSaveExam;
-    private TextView tvExamTimeSummary, tvAppSelectionSummary;
+    private EditText etExamName;
+    private EditText etExamDailyGoal;
+    private EditText etRestrictedPackagesCsv;
+    private Button btnPickStartDate;
+    private Button btnPickEndDate;
+    private Button btnSaveExam;
+
+    private MaterialCardView cardActiveExam;
+    private TextView tvActiveExamName;
+    private TextView tvActiveExamGoal;
+    private Button btnCancelActiveExam;
 
     private AppDatabase db;
     private ExecutorService executorService;
 
-    private long startDateMs = 0;
-    private long endDateMs = 0;
-    private List<String> restrictedAppPackages = new ArrayList<>();
-    private List<String> allowedAppPackages = new ArrayList<>();
+    private long selectedStartDate = 0;
+    private long selectedEndDate = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,172 +47,114 @@ public class ExamModeActivity extends AppCompatActivity {
 
         etExamName = findViewById(R.id.etExamName);
         etExamDailyGoal = findViewById(R.id.etExamDailyGoal);
-        btnSetStartDate = findViewById(R.id.btnSetStartDate);
-        btnSetEndDate = findViewById(R.id.btnSetEndDate);
-        btnSelectRestricted = findViewById(R.id.btnSelectRestricted);
-        btnSelectAllowed = findViewById(R.id.btnSelectAllowed);
+        etRestrictedPackagesCsv = findViewById(R.id.etRestrictedPackagesCsv);
+        btnPickStartDate = findViewById(R.id.btnPickStartDate);
+        btnPickEndDate = findViewById(R.id.btnPickEndDate);
         btnSaveExam = findViewById(R.id.btnSaveExam);
-        tvExamTimeSummary = findViewById(R.id.tvExamTimeSummary);
-        tvAppSelectionSummary = findViewById(R.id.tvAppSelectionSummary);
+
+        cardActiveExam = findViewById(R.id.cardActiveExam);
+        tvActiveExamName = findViewById(R.id.tvActiveExamName);
+        tvActiveExamGoal = findViewById(R.id.tvActiveExamGoal);
+        btnCancelActiveExam = findViewById(R.id.btnCancelActiveExam);
 
         db = AppDatabase.getDatabase(getApplicationContext());
         executorService = Executors.newSingleThreadExecutor();
 
-        setupListeners();
-    }
+        loadActiveExam();
 
-    private void setupListeners() {
-        btnSetStartDate.setOnClickListener(v -> showDateTimePicker(true));
-        btnSetEndDate.setOnClickListener(v -> showDateTimePicker(false));
-
-        btnSelectRestricted.setOnClickListener(v -> showAppSelectionDialog(true));
-        btnSelectAllowed.setOnClickListener(v -> showAppSelectionDialog(false));
-
+        btnPickStartDate.setOnClickListener(v -> showDatePicker(true));
+        btnPickEndDate.setOnClickListener(v -> showDatePicker(false));
         btnSaveExam.setOnClickListener(v -> saveExamProfile());
+
+        btnCancelActiveExam.setOnClickListener(v -> {
+            executorService.execute(() -> {
+                db.examProfileDao().deactivateAllExams();
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Active Exam Mode Cancelled.", Toast.LENGTH_SHORT).show();
+                    loadActiveExam();
+                });
+            });
+        });
     }
 
-    private void showDateTimePicker(boolean isStart) {
-        Calendar c = Calendar.getInstance();
+    private void showDatePicker(boolean isStart) {
+        Calendar cal = Calendar.getInstance();
         new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
-            c.set(Calendar.YEAR, year);
-            c.set(Calendar.MONTH, month);
-            c.set(Calendar.DAY_OF_MONTH, dayOfMonth);
-
-            new TimePickerDialog(this, (tView, hourOfDay, minute) -> {
-                c.set(Calendar.HOUR_OF_DAY, hourOfDay);
-                c.set(Calendar.MINUTE, minute);
-                c.set(Calendar.SECOND, 0);
-
-                if (isStart) {
-                    startDateMs = c.getTimeInMillis();
-                } else {
-                    endDateMs = c.getTimeInMillis();
-                }
-                updateTimeSummary();
-            }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), true).show();
-
-        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show();
-    }
-
-    private void updateTimeSummary() {
-        SimpleDateFormat sdf = new SimpleDateFormat("MMM dd HH:mm", Locale.getDefault());
-        String start = startDateMs > 0 ? sdf.format(startDateMs) : "Not Set";
-        String end = endDateMs > 0 ? sdf.format(endDateMs) : "Not Set";
-        tvExamTimeSummary.setText(String.format("Start: %s | End: %s", start, end));
-    }
-
-    private void showAppSelectionDialog(boolean isBlacklist) {
-        executorService.execute(() -> {
-            PackageManager pm = getPackageManager();
-            List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(getApplicationContext());
-            String ownPackage = getPackageName();
-
-            List<ApplicationInfo> eligibleApps = new ArrayList<>();
-            for (ApplicationInfo app : installedApps) {
-                if (app.packageName.equals(ownPackage)) continue;
-                eligibleApps.add(app);
-            }
-
-            runOnUiThread(() -> buildSelectionDialog(pm, eligibleApps, isBlacklist));
-        });
-    }
-
-    private void buildSelectionDialog(PackageManager pm, List<ApplicationInfo> eligibleApps, boolean isBlacklist) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(isBlacklist ? "Select Apps to Block" : "Select Apps to Allow");
-
-        LinearLayout container = new LinearLayout(this);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding(30, 20, 30, 20);
-
-        ScrollView scrollView = new ScrollView(this);
-        LinearLayout appsListLayout = new LinearLayout(this);
-        appsListLayout.setOrientation(LinearLayout.VERTICAL);
-
-        List<CheckBox> checkBoxList = new ArrayList<>();
-
-        for (ApplicationInfo app : eligibleApps) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(app.loadLabel(pm).toString());
-            cb.setTag(app.packageName);
-
-            if (isBlacklist && restrictedAppPackages.contains(app.packageName)) {
-                cb.setChecked(true);
-            } else if (!isBlacklist && allowedAppPackages.contains(app.packageName)) {
-                cb.setChecked(true);
-            }
-
-            appsListLayout.addView(cb);
-            checkBoxList.add(cb);
-        }
-
-        scrollView.addView(appsListLayout);
-        container.addView(scrollView);
-        builder.setView(container);
-
-        builder.setPositiveButton("Save Selection", (dialog, which) -> {
-            if (isBlacklist) {
-                restrictedAppPackages.clear();
+            Calendar selected = Calendar.getInstance();
+            selected.set(year, month, dayOfMonth, 0, 0, 0);
+            if (isStart) {
+                selectedStartDate = selected.getTimeInMillis();
+                btnPickStartDate.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
             } else {
-                allowedAppPackages.clear();
+                selectedEndDate = selected.getTimeInMillis();
+                btnPickEndDate.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
+            }
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    private void loadActiveExam() {
+        executorService.execute(() -> {
+            // Display either the ACTIVE exam or a PENDING exam as the primary scheduled item.
+            ExamProfileEntity active = null;
+            if (db.examProfileDao().getActiveExams() != null && !db.examProfileDao().getActiveExams().isEmpty()) {
+                active = db.examProfileDao().getActiveExams().get(0);
+            } else if (db.examProfileDao().getPendingExams() != null && !db.examProfileDao().getPendingExams().isEmpty()) {
+                active = db.examProfileDao().getPendingExams().get(0);
             }
 
-            for (CheckBox cb : checkBoxList) {
-                if (cb.isChecked()) {
-                    String pkg = (String) cb.getTag();
-                    if (isBlacklist) {
-                        // Conflict resolution: remove from allowed if it's explicitly blocked
-                        allowedAppPackages.remove(pkg);
-                        restrictedAppPackages.add(pkg);
-                    } else {
-                        restrictedAppPackages.remove(pkg);
-                        allowedAppPackages.add(pkg);
-                    }
+            final ExamProfileEntity finalActive = active;
+            runOnUiThread(() -> {
+                if (finalActive != null) {
+                    cardActiveExam.setVisibility(View.VISIBLE);
+                    tvActiveExamName.setText(finalActive.examName + " (" + finalActive.status + ")");
+                    tvActiveExamGoal.setText("Daily Goal: " + finalActive.dailyGoalMinutes + " Mins");
+                } else {
+                    cardActiveExam.setVisibility(View.GONE);
                 }
-            }
-
-            tvAppSelectionSummary.setText(String.format(Locale.getDefault(), "%d Restricted, %d Allowed",
-                    restrictedAppPackages.size(), allowedAppPackages.size()));
+            });
         });
-
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
     }
 
     private void saveExamProfile() {
         String name = etExamName.getText().toString().trim();
-        if (TextUtils.isEmpty(name)) {
-            Toast.makeText(this, "Please enter an Exam Name.", Toast.LENGTH_SHORT).show();
+        String goalStr = etExamDailyGoal.getText().toString().trim();
+        String restrictedCsv = etRestrictedPackagesCsv.getText().toString().trim();
+
+        if (name.isEmpty() || selectedStartDate == 0 || selectedEndDate == 0) {
+            Toast.makeText(this, "Please enter exam name and select valid dates.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        if (startDateMs == 0 || endDateMs == 0 || endDateMs <= startDateMs) {
-            Toast.makeText(this, "Please select a valid future End Time that occurs after the Start Time.", Toast.LENGTH_SHORT).show();
+        if (selectedEndDate <= selectedStartDate) {
+            Toast.makeText(this, "End date must be strictly after start date.", Toast.LENGTH_SHORT).show();
             return;
         }
 
         int goalMins = 180;
         try {
-            goalMins = Integer.parseInt(etExamDailyGoal.getText().toString().trim());
-        } catch (Exception ignored) {}
-
-        String restrictedCsv = TextUtils.join(",", restrictedAppPackages);
-        String allowedCsv = TextUtils.join(",", allowedAppPackages);
+            goalMins = Integer.parseInt(goalStr);
+        } catch (Exception ignored) {
+        }
 
         int finalGoalMins = goalMins;
         executorService.execute(() -> {
-            ExamProfileEntity exam = new ExamProfileEntity(
-                    name, startDateMs, endDateMs, finalGoalMins, restrictedCsv, allowedCsv
+            ExamProfileEntity newExam = new ExamProfileEntity(
+                    name,
+                    selectedStartDate,
+                    selectedEndDate,
+                    finalGoalMins,
+                    restrictedCsv,
+                    ""
             );
+            long newId = db.examProfileDao().insert(newExam);
+            newExam.id = (int) newId;
 
-            long id = db.examProfileDao().insert(exam);
-            exam.id = (int) id;
-            
-            com.example.selfpilot.util.ExamScheduler.scheduleExam(getApplicationContext(), exam);
+            // Schedule the background alarms immediately
+            ExamScheduler.scheduleExam(getApplicationContext(), newExam);
 
             runOnUiThread(() -> {
-                Toast.makeText(this, "Exam Schedule Saved successfully.", Toast.LENGTH_SHORT).show();
-                finish();
+                Toast.makeText(this, "Exam Profile Scheduled!", Toast.LENGTH_SHORT).show();
+                loadActiveExam();
             });
         });
     }

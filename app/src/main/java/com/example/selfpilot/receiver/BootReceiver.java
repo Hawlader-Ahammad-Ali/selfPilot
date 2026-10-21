@@ -8,9 +8,11 @@ import androidx.core.content.ContextCompat;
 
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
+import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.service.FocusTimerService;
+import com.example.selfpilot.util.ExamScheduler;
 
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -54,18 +56,28 @@ public class BootReceiver extends BroadcastReceiver {
                     recoverIntent.setAction(FocusTimerService.ACTION_RECOVER);
                     ContextCompat.startForegroundService(context, recoverIntent);
                 }
-                // 3. Recover Active and Pending Exams Scheduling
+
+                // 3. Recover Pending and Active Exam Alarms
                 List<ExamProfileEntity> pendingExams = db.examProfileDao().getPendingExams();
                 if (pendingExams != null) {
                     for (ExamProfileEntity pending : pendingExams) {
-                        com.example.selfpilot.util.ExamScheduler.scheduleExam(context, pending);
+                        ExamScheduler.scheduleExam(context.getApplicationContext(), pending);
                     }
                 }
-
+                
                 List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
                 if (activeExams != null) {
                     for (ExamProfileEntity active : activeExams) {
-                        com.example.selfpilot.util.ExamScheduler.scheduleExam(context, active); // End intent recovery
+                        // If the phone was off when the exam was supposed to end, end it now.
+                        if (System.currentTimeMillis() >= active.endDate) {
+                            Intent endIntent = new Intent(context, ExamAlarmReceiver.class);
+                            endIntent.setAction(ExamAlarmReceiver.ACTION_EXAM_END);
+                            endIntent.putExtra(ExamAlarmReceiver.EXTRA_EXAM_ID, active.id);
+                            context.sendBroadcast(endIntent);
+                        } else {
+                            // Re-schedule the end alarm to ensure it completes successfully later
+                            ExamScheduler.scheduleExam(context.getApplicationContext(), active);
+                        }
                     }
                 }
             });

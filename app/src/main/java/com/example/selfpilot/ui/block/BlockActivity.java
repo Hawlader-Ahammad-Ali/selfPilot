@@ -13,11 +13,13 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.EmergencyUnlockEntity;
+import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
 import java.util.Calendar;
+import java.util.List;
 
 public class BlockActivity extends AppCompatActivity {
 
@@ -39,16 +41,16 @@ public class BlockActivity extends AppCompatActivity {
         Button btnGoHome = findViewById(R.id.btn_go_home);
         btnGoHome.setOnClickListener(v -> goHome());
 
-        btnEmergencyUnlock = findViewById(R.id.btn_emergency_unlock);
-        btnForceStop = findViewById(R.id.btn_force_stop);
-        tvBlockedMessage = findViewById(R.id.tvBlockedMessage);
-
         getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 goHome();
             }
         });
+
+        btnEmergencyUnlock = findViewById(R.id.btn_emergency_unlock);
+        btnForceStop = findViewById(R.id.btn_force_stop);
+        tvBlockedMessage = findViewById(R.id.tvBlockedMessage);
 
         loadStateAndDetermineMode();
 
@@ -70,12 +72,12 @@ public class BlockActivity extends AppCompatActivity {
         finish();
     }
 
-
-
     private void loadStateAndDetermineMode() {
         new Thread(() -> {
             boolean isFrozen = false;
             boolean isFocusMode = false;
+            boolean isExamMode = false;
+            
             if (targetPackageName != null) {
                 FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
                 if (frozenApp != null && frozenApp.isFrozen) {
@@ -83,13 +85,26 @@ public class BlockActivity extends AppCompatActivity {
                 }
             }
 
+            if (!isFrozen) {
+                List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+                if (activeExams != null && !activeExams.isEmpty()) {
+                    for (ExamProfileEntity exam : activeExams) {
+                        if (exam.restrictedAppsCsv != null && exam.restrictedAppsCsv.contains(targetPackageName)) {
+                            isExamMode = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
             FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
-            if (activeSession != null && !isFrozen) {
+            if (activeSession != null && !isFrozen && !isExamMode) {
                 isFocusMode = true;
             }
 
             final boolean finalIsFrozen = isFrozen;
             final boolean finalIsFocusMode = isFocusMode;
+            final boolean finalIsExamMode = isExamMode;
 
             long todayStart = getTodayStart();
             todayUnlockEntity = db.emergencyUnlockDao().getUnlockByDate(todayStart);
@@ -105,6 +120,9 @@ public class BlockActivity extends AppCompatActivity {
                 if (finalIsFrozen) {
                     tvBlockedMessage.setText("This application is currently FROZEN.");
                     btnForceStop.setVisibility(View.VISIBLE);
+                } else if (finalIsExamMode) {
+                    tvBlockedMessage.setText("Exam Mode Active.\nThis app is restricted to help you study.");
+                    btnForceStop.setVisibility(View.GONE);
                 } else if (finalIsFocusMode) {
                     tvBlockedMessage.setText("Focus Mode Active. This app is restricted.");
                     btnForceStop.setVisibility(View.GONE);
@@ -132,7 +150,7 @@ public class BlockActivity extends AppCompatActivity {
             todayUnlockEntity.unlocksUsed++;
             db.emergencyUnlockDao().update(todayUnlockEntity);
 
-            // 2. Set rule unlocked until now + 5 minutes
+            // 2. Set generic rule unlocked until now + 5 minutes
             RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(targetPackageName);
             if (rule == null) {
                 rule = new RestrictionRuleEntity();
@@ -146,11 +164,20 @@ public class BlockActivity extends AppCompatActivity {
                 db.restrictionRuleDao().update(rule);
             }
 
-            // 3. If Focus Mode is active, deduct XP by incrementing its emergency use count
+            // 3. If Focus Mode is active, deduct XP
             FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
             if (activeSession != null) {
                 activeSession.emergencyUnlocksUsed++;
                 db.focusSessionDao().update(activeSession);
+            }
+
+            // 4. If Exam Mode is active, deduct XP for active exams
+            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+            if (activeExams != null) {
+                for (ExamProfileEntity exam : activeExams) {
+                    exam.emergencyUnlocksUsed++;
+                    db.examProfileDao().update(exam);
+                }
             }
             
             runOnUiThread(this::goHome);
