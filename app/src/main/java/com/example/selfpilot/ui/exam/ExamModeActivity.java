@@ -1,22 +1,36 @@
 package com.example.selfpilot.ui.exam;
 
 import android.app.DatePickerDialog;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.util.ExamScheduler;
+import com.example.selfpilot.util.UsageUtil;
 import com.google.android.material.card.MaterialCardView;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -24,10 +38,12 @@ public class ExamModeActivity extends AppCompatActivity {
 
     private EditText etExamName;
     private EditText etExamDailyGoal;
-    private EditText etRestrictedPackagesCsv;
     private Button btnPickStartDate;
     private Button btnPickEndDate;
     private Button btnSaveExam;
+
+    private Button btnSelectRestrictedApps;
+    private Button btnSelectAllowedApps;
 
     private MaterialCardView cardActiveExam;
     private TextView tvActiveExamName;
@@ -40,6 +56,9 @@ public class ExamModeActivity extends AppCompatActivity {
     private long selectedStartDate = 0;
     private long selectedEndDate = 0;
 
+    private List<String> selectedRestrictedPackages = new ArrayList<>();
+    private List<String> selectedAllowedPackages = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -47,10 +66,11 @@ public class ExamModeActivity extends AppCompatActivity {
 
         etExamName = findViewById(R.id.etExamName);
         etExamDailyGoal = findViewById(R.id.etExamDailyGoal);
-        etRestrictedPackagesCsv = findViewById(R.id.etRestrictedPackagesCsv);
         btnPickStartDate = findViewById(R.id.btnPickStartDate);
         btnPickEndDate = findViewById(R.id.btnPickEndDate);
         btnSaveExam = findViewById(R.id.btnSaveExam);
+        btnSelectRestrictedApps = findViewById(R.id.btnSelectRestrictedApps);
+        btnSelectAllowedApps = findViewById(R.id.btnSelectAllowedApps);
 
         cardActiveExam = findViewById(R.id.cardActiveExam);
         tvActiveExamName = findViewById(R.id.tvActiveExamName);
@@ -65,16 +85,24 @@ public class ExamModeActivity extends AppCompatActivity {
         btnPickStartDate.setOnClickListener(v -> showDatePicker(true));
         btnPickEndDate.setOnClickListener(v -> showDatePicker(false));
         btnSaveExam.setOnClickListener(v -> saveExamProfile());
+        
+        btnSelectRestrictedApps.setOnClickListener(v -> showAppSelectionDialog("Select Apps to Restrict", selectedRestrictedPackages, newSelected -> {
+            selectedRestrictedPackages = newSelected;
+            btnSelectRestrictedApps.setText("Select Apps to Restrict (" + newSelected.size() + " selected)");
+        }));
 
-        btnCancelActiveExam.setOnClickListener(v -> {
-            executorService.execute(() -> {
-                db.examProfileDao().deactivateAllExams();
-                runOnUiThread(() -> {
-                    Toast.makeText(this, "Active Exam Mode Cancelled.", Toast.LENGTH_SHORT).show();
-                    loadActiveExam();
-                });
+        btnSelectAllowedApps.setOnClickListener(v -> showAppSelectionDialog("Select Apps to Allow", selectedAllowedPackages, newSelected -> {
+            selectedAllowedPackages = newSelected;
+            btnSelectAllowedApps.setText("Select Apps to Allow (" + newSelected.size() + " selected)");
+        }));
+
+        btnCancelActiveExam.setOnClickListener(v -> executorService.execute(() -> {
+            db.examProfileDao().deactivateAllExams();
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Active Exam Mode Cancelled.", Toast.LENGTH_SHORT).show();
+                loadActiveExam();
             });
-        });
+        }));
     }
 
     private void showDatePicker(boolean isStart) {
@@ -94,7 +122,6 @@ public class ExamModeActivity extends AppCompatActivity {
 
     private void loadActiveExam() {
         executorService.execute(() -> {
-            // Display either the ACTIVE exam or a PENDING exam as the primary scheduled item.
             ExamProfileEntity active = null;
             if (db.examProfileDao().getActiveExams() != null && !db.examProfileDao().getActiveExams().isEmpty()) {
                 active = db.examProfileDao().getActiveExams().get(0);
@@ -108,6 +135,27 @@ public class ExamModeActivity extends AppCompatActivity {
                     cardActiveExam.setVisibility(View.VISIBLE);
                     tvActiveExamName.setText(finalActive.examName + " (" + finalActive.status + ")");
                     tvActiveExamGoal.setText("Daily Goal: " + finalActive.dailyGoalMinutes + " Mins");
+
+                    if (finalActive.restrictedAppsCsv != null && !finalActive.restrictedAppsCsv.isEmpty()) {
+                        selectedRestrictedPackages = new ArrayList<>(Arrays.asList(finalActive.restrictedAppsCsv.split(",")));
+                        btnSelectRestrictedApps.setText("Select Apps to Restrict (" + selectedRestrictedPackages.size() + " selected)");
+                    }
+                    if (finalActive.allowedAppsCsv != null && !finalActive.allowedAppsCsv.isEmpty()) {
+                        selectedAllowedPackages = new ArrayList<>(Arrays.asList(finalActive.allowedAppsCsv.split(",")));
+                        btnSelectAllowedApps.setText("Select Apps to Allow (" + selectedAllowedPackages.size() + " selected)");
+                    }
+                    etExamName.setText(finalActive.examName);
+                    etExamDailyGoal.setText(String.valueOf(finalActive.dailyGoalMinutes));
+                    
+                    Calendar sCal = Calendar.getInstance();
+                    sCal.setTimeInMillis(finalActive.startDate);
+                    selectedStartDate = finalActive.startDate;
+                    btnPickStartDate.setText(sCal.get(Calendar.YEAR) + "-" + (sCal.get(Calendar.MONTH) + 1) + "-" + sCal.get(Calendar.DAY_OF_MONTH));
+
+                    Calendar eCal = Calendar.getInstance();
+                    eCal.setTimeInMillis(finalActive.endDate);
+                    selectedEndDate = finalActive.endDate;
+                    btnPickEndDate.setText(eCal.get(Calendar.YEAR) + "-" + (eCal.get(Calendar.MONTH) + 1) + "-" + eCal.get(Calendar.DAY_OF_MONTH));
                 } else {
                     cardActiveExam.setVisibility(View.GONE);
                 }
@@ -115,10 +163,82 @@ public class ExamModeActivity extends AppCompatActivity {
         });
     }
 
+    private void showAppSelectionDialog(String title, List<String> currentlySelected, OnSelectionConfirmedListener listener) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(title);
+
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_select_apps, null);
+        builder.setView(dialogView);
+
+        EditText etSearchApp = dialogView.findViewById(R.id.etSearchApp);
+        Button btnSelectAll = dialogView.findViewById(R.id.btnSelectAll);
+        Button btnClearAll = dialogView.findViewById(R.id.btnClearAll);
+        ProgressBar pbLoading = dialogView.findViewById(R.id.pbLoading);
+        RecyclerView rvApps = dialogView.findViewById(R.id.rvApps);
+
+        rvApps.setLayoutManager(new LinearLayoutManager(this));
+        SelectableAppAdapter adapter = new SelectableAppAdapter();
+        rvApps.setAdapter(adapter);
+
+        AlertDialog dialog = builder.setPositiveButton("Confirm Selection", (d, w) -> {
+            listener.onConfirm(adapter.getSelectedPackages());
+        }).setNegativeButton("Cancel", null).create();
+
+        pbLoading.setVisibility(View.VISIBLE);
+        rvApps.setVisibility(View.GONE);
+
+        executorService.execute(() -> {
+            PackageManager pm = getPackageManager();
+            List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(getApplicationContext());
+            String ownPackage = getPackageName();
+
+            List<SelectableAppAdapter.AppItem> items = new ArrayList<>();
+            for (ApplicationInfo appInfo : installedApps) {
+                if (appInfo.packageName.equals(ownPackage)) continue;
+
+                String name = appInfo.loadLabel(pm).toString();
+                Drawable icon = null;
+                try {
+                    icon = pm.getApplicationIcon(appInfo.packageName);
+                } catch (PackageManager.NameNotFoundException ignored) {}
+                
+                boolean isSelected = currentlySelected.contains(appInfo.packageName);
+                items.add(new SelectableAppAdapter.AppItem(appInfo.packageName, name, icon, isSelected));
+            }
+
+            runOnUiThread(() -> {
+                pbLoading.setVisibility(View.GONE);
+                rvApps.setVisibility(View.VISIBLE);
+                adapter.setAppList(items);
+
+                etSearchApp.addTextChangedListener(new TextWatcher() {
+                    @Override
+                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                    @Override
+                    public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        adapter.filter(s.toString().trim());
+                    }
+
+                    @Override
+                    public void afterTextChanged(Editable s) {}
+                });
+
+                btnSelectAll.setOnClickListener(v -> adapter.selectAll());
+                btnClearAll.setOnClickListener(v -> adapter.clearAll());
+            });
+        });
+
+        dialog.show();
+    }
+
+    interface OnSelectionConfirmedListener {
+        void onConfirm(List<String> selectedPackages);
+    }
+
     private void saveExamProfile() {
         String name = etExamName.getText().toString().trim();
         String goalStr = etExamDailyGoal.getText().toString().trim();
-        String restrictedCsv = etRestrictedPackagesCsv.getText().toString().trim();
 
         if (name.isEmpty() || selectedStartDate == 0 || selectedEndDate == 0) {
             Toast.makeText(this, "Please enter exam name and select valid dates.", Toast.LENGTH_SHORT).show();
@@ -129,6 +249,22 @@ public class ExamModeActivity extends AppCompatActivity {
             Toast.makeText(this, "End date must be strictly after start date.", Toast.LENGTH_SHORT).show();
             return;
         }
+        
+        if (selectedRestrictedPackages.isEmpty()) {
+            Toast.makeText(this, "Please select at least one app to restrict.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Check for conflicts between restricted and allowed
+        for (String restrictedPkg : selectedRestrictedPackages) {
+            if (selectedAllowedPackages.contains(restrictedPkg)) {
+                Toast.makeText(this, "Conflict: An app cannot be both Restricted and Allowed.", Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+
+        String restrictedCsv = String.join(",", selectedRestrictedPackages);
+        String allowedCsv = String.join(",", selectedAllowedPackages);
 
         int goalMins = 180;
         try {
@@ -144,12 +280,11 @@ public class ExamModeActivity extends AppCompatActivity {
                     selectedEndDate,
                     finalGoalMins,
                     restrictedCsv,
-                    ""
+                    allowedCsv
             );
             long newId = db.examProfileDao().insert(newExam);
             newExam.id = (int) newId;
 
-            // Schedule the background alarms immediately
             ExamScheduler.scheduleExam(getApplicationContext(), newExam);
 
             runOnUiThread(() -> {
