@@ -1,20 +1,33 @@
 package com.example.selfpilot.service;
 
 import android.accessibilityservice.AccessibilityService;
-import android.app.usage.UsageStats;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 
-import com.example.selfpilot.data.AppDatabase;
-import com.example.selfpilot.data.FrozenAppEntity;
-import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.ui.block.BlockActivity;
-import com.example.selfpilot.util.UsageUtil;
+import com.example.selfpilot.util.RestrictionChecker;
 
-import java.util.Calendar;
-import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AppLockAccessibilityService extends AccessibilityService {
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private String currentPackage = null;
+
+    private final Runnable checkLimitRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (currentPackage != null) {
+                checkPackageAndBlockIfRestricted(currentPackage);
+                // Re-check after 60 seconds if the user stays in the app
+                handler.postDelayed(this, 60000);
+            }
+        }
+    };
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -23,83 +36,53 @@ public class AppLockAccessibilityService extends AccessibilityService {
             if (packageNameSeq != null) {
                 String packageName = packageNameSeq.toString();
 
-                // Do not block SelfPilot or critical Android system components
                 if (packageName.equals(getPackageName()) ||
                         packageName.equals("android") ||
                         packageName.equals("com.android.systemui") ||
                         packageName.contains("launcher") ||
                         packageName.contains("settings")) {
+                    currentPackage = null;
+                    handler.removeCallbacks(checkLimitRunnable);
                     return;
                 }
 
-                new Thread(() -> {
-                    AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
-                    RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
-                    FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
-
-                    if (rule == null && frozen == null) return;
-
-                    long now = System.currentTimeMillis();
-                    if (rule != null && now < rule.unlockedUntil) {
-                        // Emergency unlocked
-                        return;
-                    }
-
-                    boolean shouldBlock = (rule != null && rule.isBlocked) || (frozen != null && frozen.isFrozen);
-
-                    // Check Daily Limit Exceeded
-                    if (!shouldBlock && rule != null && rule.limitMinutes > 0) {
-                        Calendar calendar = Calendar.getInstance();
-                        calendar.set(Calendar.HOUR_OF_DAY, 0);
-                        calendar.set(Calendar.MINUTE, 0);
-                        calendar.set(Calendar.SECOND, 0);
-                        calendar.set(Calendar.MILLISECOND, 0);
-                        long startOfDay = calendar.getTimeInMillis();
-
-                        Map<String, UsageStats> statsMap = UsageUtil.getUsageStats(getApplicationContext(), startOfDay, now);
-                        if (statsMap != null && statsMap.containsKey(packageName)) {
-                            UsageStats stats = statsMap.get(packageName);
-                            if (stats != null) {
-                                long usedMins = stats.getTotalTimeInForeground() / 60000;
-                                if (usedMins >= rule.limitMinutes) {
-                                    shouldBlock = true;
-                                }
-                            }
-                        }
-                    }
-
-                    // Check Scheduled Restrictions
-                    if (!shouldBlock && rule != null && rule.startTimeMinutes >= 0 && rule.endTimeMinutes >= 0) {
-                        Calendar c = Calendar.getInstance();
-                        int currentMins = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-                        int startMins = rule.startTimeMinutes;
-                        int endMins = rule.endTimeMinutes;
-
-                        if (startMins > endMins) {
-                            // Overnight schedule (e.g. 21:00 to 08:00)
-                            if (currentMins >= startMins || currentMins <= endMins) {
-                                shouldBlock = true;
-                            }
-                        } else {
-                            // Same day schedule (e.g. 09:00 to 17:00)
-                            if (currentMins >= startMins && currentMins <= endMins) {
-                                shouldBlock = true;
-                            }
-                        }
-                    }
-
-                    if (shouldBlock) {
-                        Intent intent = new Intent(this, BlockActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        intent.putExtra("packageName", packageName);
-                        startActivity(intent);
-                    }
-                }).start();
+                currentPackage = packageName;
+                handler.removeCallbacks(checkLimitRunnable);
+                
+                // Check immediately on launch
+                checkPackageAndBlockIfRestricted(currentPackage);
+                
+                // Start background poller to kick out if limit expires while inside the app
+                handler.postDelayed(checkLimitRunnable, 60000);
             }
         }
     }
 
+    private void checkPackageAndBlockIfRestricted(String packageName) {
+        executorService.execute(() -> {
+            boolean shouldBlock = RestrictionChecker.isAppRestricted(getApplicationContext(), packageName);
+
+            if (shouldBlock) {
+                // Return to main thread to launch activity safely
+                handler.post(() -> {
+                    Intent intent = new Intent(this, BlockActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    intent.putExtra("packageName", packageName);
+                    startActivity(intent);
+                });
+            }
+        });
+    }
+
     @Override
     public void onInterrupt() {
+        handler.removeCallbacks(checkLimitRunnable);
+    }
+    
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        handler.removeCallbacks(checkLimitRunnable);
+        executorService.shutdown();
     }
 }

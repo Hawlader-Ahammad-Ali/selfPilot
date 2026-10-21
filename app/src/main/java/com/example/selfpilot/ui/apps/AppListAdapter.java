@@ -1,5 +1,6 @@
 package com.example.selfpilot.ui.apps;
 
+import android.app.usage.UsageStats;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
@@ -25,13 +26,16 @@ import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewHolder> {
 
     private List<AppInfoEntity> appList = new ArrayList<>();
+    private Map<String, UsageStats> usageStatsMap = new HashMap<>();
     private final PackageManager packageManager;
     private final AppDatabase db;
     private final ExecutorService executorService;
@@ -42,8 +46,9 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
         this.executorService = Executors.newSingleThreadExecutor();
     }
 
-    public void setAppList(List<AppInfoEntity> appList) {
+    public void setAppList(List<AppInfoEntity> appList, Map<String, UsageStats> stats) {
         this.appList = appList;
+        this.usageStatsMap = stats != null ? stats : new HashMap<>();
         notifyDataSetChanged();
     }
 
@@ -67,14 +72,17 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
             status.append("Non-Study");
         }
 
+        UsageStats stats = usageStatsMap.get(appInfo.packageName);
+        long usedMins = stats != null ? (stats.getTotalTimeInForeground() / 60000) : 0;
+
+        if (appInfo.dailyLimitMinutes > 0) {
+            status.append(String.format(" • Used: %dm / Limit: %dm", usedMins, appInfo.dailyLimitMinutes));
+        }
+
         if (appInfo.isFrozen) {
             status.append(" • FROZEN");
-        }
-        if (appInfo.dailyLimitMinutes > 0) {
-            status.append(" • Limit: ").append(appInfo.dailyLimitMinutes).append("m");
-        }
-        if (appInfo.isBlocked) {
-            status.append(" • BLOCKED");
+        } else if (appInfo.isBlocked || (appInfo.dailyLimitMinutes > 0 && usedMins >= appInfo.dailyLimitMinutes)) {
+            status.append(" • RESTRICTED");
         }
 
         holder.appStatusTextView.setText(status.toString());
@@ -111,7 +119,7 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
         layout.setPadding(40, 20, 40, 20);
 
         TextView tvInfo = new TextView(context);
-        tvInfo.setText("Configure restrictions, limits, and freeze status:");
+        tvInfo.setText("Configure restrictions, limits, and notification behavior:");
         tvInfo.setPadding(0, 0, 0, 16);
         layout.addView(tvInfo);
 
@@ -124,6 +132,11 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
         switchBlock.setText("App Lock (Block Launch)");
         switchBlock.setChecked(appInfo.isBlocked);
         layout.addView(switchBlock);
+        
+        MaterialSwitch switchNotifications = new MaterialSwitch(context);
+        switchNotifications.setText("Suppress Notifications (When Restricted)");
+        switchNotifications.setChecked(appInfo.suppressNotifications);
+        layout.addView(switchNotifications);
 
         TextView tvLimitLabel = new TextView(context);
         tvLimitLabel.setText("Daily Limit (Minutes, 0 = No Limit):");
@@ -140,6 +153,8 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
         builder.setPositiveButton("Save", (dialog, which) -> {
             boolean isFrozen = switchFreeze.isChecked();
             boolean isBlocked = switchBlock.isChecked();
+            boolean suppressNotifs = switchNotifications.isChecked();
+            
             int limit = 0;
             try {
                 limit = Integer.parseInt(etLimit.getText().toString().trim());
@@ -148,6 +163,7 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
 
             appInfo.isFrozen = isFrozen;
             appInfo.isBlocked = isBlocked || isFrozen;
+            appInfo.suppressNotifications = suppressNotifs;
             appInfo.dailyLimitMinutes = limit;
 
             int finalLimit = limit;
@@ -168,6 +184,7 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
                 }
                 rule.limitMinutes = finalLimit;
                 rule.isBlocked = appInfo.isBlocked;
+                rule.suppressNotifications = suppressNotifs;
                 db.restrictionRuleDao().insert(rule);
             });
 

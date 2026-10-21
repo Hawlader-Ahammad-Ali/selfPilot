@@ -16,6 +16,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.selfpilot.R;
@@ -28,6 +29,7 @@ import com.example.selfpilot.util.UsageUtil;
 
 import java.util.Calendar;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,8 +37,10 @@ public class SettingsFragment extends Fragment {
 
     private TextView tvUsagePermissionStatus;
     private TextView tvAccessibilityStatus;
+    private TextView tvNotificationStatus;
     private Button btnOpenUsageAccess;
     private Button btnEnableAppLock;
+    private Button btnOpenNotificationAccess;
     private EditText etDailyBudgetMins;
     private Button btnSaveBudget;
     private Button btnOpenExamModeSettings;
@@ -53,8 +57,12 @@ public class SettingsFragment extends Fragment {
 
         tvUsagePermissionStatus = view.findViewById(R.id.tvUsagePermissionStatus);
         tvAccessibilityStatus = view.findViewById(R.id.tvAccessibilityStatus);
+        tvNotificationStatus = view.findViewById(R.id.tvNotificationStatus);
+        
         btnOpenUsageAccess = view.findViewById(R.id.btnOpenUsageAccess);
         btnEnableAppLock = view.findViewById(R.id.btn_enable_app_lock);
+        btnOpenNotificationAccess = view.findViewById(R.id.btnOpenNotificationAccess);
+        
         etDailyBudgetMins = view.findViewById(R.id.etDailyBudgetMins);
         btnSaveBudget = view.findViewById(R.id.btnSaveBudget);
         btnOpenExamModeSettings = view.findViewById(R.id.btnOpenExamModeSettings);
@@ -80,6 +88,13 @@ public class SettingsFragment extends Fragment {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             startActivity(intent);
         });
+        
+        if (btnOpenNotificationAccess != null) {
+            btnOpenNotificationAccess.setOnClickListener(v -> {
+                Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+                startActivity(intent);
+            });
+        }
 
         btnSaveBudget.setOnClickListener(v -> {
             String str = etDailyBudgetMins.getText().toString().trim();
@@ -138,6 +153,18 @@ public class SettingsFragment extends Fragment {
 
         tvAccessibilityStatus.setText("App Lock Accessibility: Configured via Settings");
         tvAccessibilityStatus.setTextColor(getResources().getColor(R.color.electric_blue, null));
+        
+        if (tvNotificationStatus != null) {
+            Set<String> listeners = NotificationManagerCompat.getEnabledListenerPackages(requireContext());
+            boolean hasNotificationAccess = listeners.contains(requireContext().getPackageName());
+            if (hasNotificationAccess) {
+                tvNotificationStatus.setText("Notification Suppression: Granted (Active)");
+                tvNotificationStatus.setTextColor(getResources().getColor(R.color.success_green, null));
+            } else {
+                tvNotificationStatus.setText("Notification Suppression: Not Granted (Tap Below)");
+                tvNotificationStatus.setTextColor(getResources().getColor(R.color.warning_yellow, null));
+            }
+        }
     }
 
     private void exportDataJSON() {

@@ -21,6 +21,8 @@ public class AppInfoEntity {
     public boolean isFrozen;
 
     public boolean isBlocked;
+    
+    public boolean suppressNotifications;
 
     public AppInfoEntity(@NonNull String packageName, String appName, boolean isStudyApp) {
         this.packageName = packageName;
@@ -30,5 +32,6 @@ public class AppInfoEntity {
         this.dailyLimitMinutes = 0;
         this.isFrozen = false;
         this.isBlocked = false;
+        this.suppressNotifications = false;
     }
 }

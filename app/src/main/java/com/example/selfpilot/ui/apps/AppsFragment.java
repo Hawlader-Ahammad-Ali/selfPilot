@@ -1,5 +1,6 @@
 package com.example.selfpilot.ui.apps;
 
+import android.app.usage.UsageStats;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
@@ -23,7 +24,10 @@ import com.example.selfpilot.util.UsageUtil;
 import com.google.android.material.chip.ChipGroup;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,6 +40,7 @@ public class AppsFragment extends Fragment {
     private ChipGroup chipGroupFilter;
 
     private List<AppInfoEntity> masterAppList = new ArrayList<>();
+    private Map<String, UsageStats> todayUsageStats = new HashMap<>();
     private String currentSearchQuery = "";
     private int currentFilterId = R.id.chipAll;
 
@@ -96,6 +101,18 @@ public class AppsFragment extends Fragment {
 
             String ownPackage = requireContext().getPackageName();
 
+            Calendar calendar = Calendar.getInstance();
+            calendar.set(Calendar.HOUR_OF_DAY, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
+            long startOfDay = calendar.getTimeInMillis();
+            
+            todayUsageStats = UsageUtil.getUsageStats(requireContext(), startOfDay, System.currentTimeMillis());
+            if (todayUsageStats == null) {
+                todayUsageStats = new HashMap<>();
+            }
+
             for (ApplicationInfo appInfo : installedApps) {
                 // Exclude SelfPilot itself
                 if (appInfo.packageName.equals(ownPackage)) continue;
@@ -141,7 +158,7 @@ public class AppsFragment extends Fragment {
             filtered.add(app);
         }
 
-        adapter.setAppList(filtered);
+        adapter.setAppList(filtered, todayUsageStats);
     }
 
     @Override
