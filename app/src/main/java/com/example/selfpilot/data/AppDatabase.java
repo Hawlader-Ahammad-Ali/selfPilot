@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase;
         ExamProfileEntity.class,
         AchievementEntity.class,
         FrozenAppEntity.class
-}, version = 9, exportSchema = false)
+}, version = 10, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract AppUsageDao appUsageDao();

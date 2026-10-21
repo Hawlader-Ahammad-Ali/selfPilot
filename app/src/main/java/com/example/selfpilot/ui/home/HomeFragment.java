@@ -200,7 +200,9 @@ public class HomeFragment extends Fragment {
             int remainingUnlocks = Math.max(0, 3 - usedUnlocks);
 
             // 5. Active Exam / Study Mode status
-            ExamProfileEntity activeExam = db.examProfileDao().getActiveExam();
+            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+            ExamProfileEntity activeExam = activeExams != null && !activeExams.isEmpty() ? activeExams.get(0) : null;
+            
             String modeStatusText = (activeExam != null && activeExam.isActive)
                     ? "Mode: EXAM MODE Active (" + activeExam.examName + ")"
                     : "Mode: Standard Study Mode";

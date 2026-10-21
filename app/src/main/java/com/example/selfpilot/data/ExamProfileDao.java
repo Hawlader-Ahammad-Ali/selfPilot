@@ -11,17 +11,20 @@ import java.util.List;
 @Dao
 public interface ExamProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    void insert(ExamProfileEntity exam);
+    long insert(ExamProfileEntity exam);
 
     @Update
     void update(ExamProfileEntity exam);
 
-    @Query("SELECT * FROM exam_profiles ORDER BY startDate ASC")
+    @Query("SELECT * FROM exam_profiles ORDER BY startDate DESC")
     List<ExamProfileEntity> getAllExams();
 
-    @Query("SELECT * FROM exam_profiles WHERE isActive = 1 LIMIT 1")
-    ExamProfileEntity getActiveExam();
+    @Query("SELECT * FROM exam_profiles WHERE isActive = 1")
+    List<ExamProfileEntity> getActiveExams();
 
-    @Query("UPDATE exam_profiles SET isActive = 0")
-    void deactivateAllExams();
+    @Query("SELECT * FROM exam_profiles WHERE status = 'PENDING'")
+    List<ExamProfileEntity> getPendingExams();
+
+    @Query("SELECT * FROM exam_profiles WHERE id = :id LIMIT 1")
+    ExamProfileEntity getExamById(int id);
 }

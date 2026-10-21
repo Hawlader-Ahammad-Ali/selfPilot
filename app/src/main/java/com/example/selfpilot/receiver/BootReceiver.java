@@ -54,6 +54,20 @@ public class BootReceiver extends BroadcastReceiver {
                     recoverIntent.setAction(FocusTimerService.ACTION_RECOVER);
                     ContextCompat.startForegroundService(context, recoverIntent);
                 }
+                // 3. Recover Active and Pending Exams Scheduling
+                List<ExamProfileEntity> pendingExams = db.examProfileDao().getPendingExams();
+                if (pendingExams != null) {
+                    for (ExamProfileEntity pending : pendingExams) {
+                        com.example.selfpilot.util.ExamScheduler.scheduleExam(context, pending);
+                    }
+                }
+
+                List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+                if (activeExams != null) {
+                    for (ExamProfileEntity active : activeExams) {
+                        com.example.selfpilot.util.ExamScheduler.scheduleExam(context, active); // End intent recovery
+                    }
+                }
             });
         }
     }

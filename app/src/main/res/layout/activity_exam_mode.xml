@@ -58,10 +58,82 @@
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_secondary" />
 
+                <!-- Date & Time Selection -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnSetStartDate"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:text="Start Time" />
+
+                    <Button
+                        android:id="@+id/btnSetEndDate"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="End Time" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvExamTimeSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="No time scheduled"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <!-- App Selection Buttons -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnSelectRestricted"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:text="Blacklist Apps"
+                        android:textColor="@color/error_red" />
+
+                    <Button
+                        android:id="@+id/btnSelectAllowed"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Whitelist Apps"
+                        android:textColor="@color/success_green" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvAppSelectionSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="0 Restricted, 0 Allowed"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="16dp"
                     android:text="Daily Study Goal (Minutes)"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
@@ -80,44 +152,28 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="Save &amp; Activate Exam Profile" />
+                    android:text="Save Schedule" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Communication Policy Explanation Card -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- Exam History RecyclerView -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Exam History &amp; Upcoming"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvExamHistory"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/card_background"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Communication Exceptions Policy"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Note on Platform Limitations:\nAndroid OS does not allow third-party apps to inspect or separate WhatsApp/Telegram calls from messages without private message interception.\n\nRecommended Setup:\nAllow essential messaging apps during study breaks, or configure quiet hours in Android Notification Settings for critical contacts."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+            android:layout_marginTop="8dp"
+            android:nestedScrollingEnabled="false"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
     </LinearLayout>
 </ScrollView>
