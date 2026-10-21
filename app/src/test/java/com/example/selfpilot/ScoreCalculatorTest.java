@@ -1,8 +1,12 @@
 package com.example.selfpilot;
 
+import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.util.ScoreCalculator;
 
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
@@ -25,9 +29,20 @@ public class ScoreCalculatorTest {
 
     @Test
     public void testStudyPointsCalculation() {
-        // 90 mins study app usage + 2 focus sessions (2 * 10 = 20 bonus) -> 110 pts
-        int points = ScoreCalculator.calculateStudyPoints(90, 2);
-        assertEquals(110, points);
+        // Create mocked completed focus sessions
+        List<FocusSessionEntity> sessions = new ArrayList<>();
+        
+        FocusSessionEntity session1 = new FocusSessionEntity();
+        session1.xpEarned = 20; // Perfect session
+        sessions.add(session1);
+        
+        FocusSessionEntity session2 = new FocusSessionEntity();
+        session2.xpEarned = 10; // 2 emergency unlocks used
+        sessions.add(session2);
+        
+        // 90 mins study app usage + 30 XP from sessions -> 120 pts
+        int points = ScoreCalculator.calculateStudyPoints(90, sessions);
+        assertEquals(120, points);
     }
 
     @Test

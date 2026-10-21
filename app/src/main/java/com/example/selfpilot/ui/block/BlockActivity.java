@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.EmergencyUnlockEntity;
+import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
@@ -36,17 +37,18 @@ public class BlockActivity extends AppCompatActivity {
         db = AppDatabase.getDatabase(getApplicationContext());
 
         Button btnGoHome = findViewById(R.id.btn_go_home);
-        btnGoHome.setOnClickListener(v -> {
-            Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-            homeIntent.addCategory(Intent.CATEGORY_HOME);
-            homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(homeIntent);
-            finish();
-        });
+        btnGoHome.setOnClickListener(v -> goHome());
 
         btnEmergencyUnlock = findViewById(R.id.btn_emergency_unlock);
         btnForceStop = findViewById(R.id.btn_force_stop);
         tvBlockedMessage = findViewById(R.id.tvBlockedMessage);
+
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                goHome();
+            }
+        });
 
         loadStateAndDetermineMode();
 
@@ -60,9 +62,20 @@ public class BlockActivity extends AppCompatActivity {
         });
     }
 
+    private void goHome() {
+        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+        homeIntent.addCategory(Intent.CATEGORY_HOME);
+        homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(homeIntent);
+        finish();
+    }
+
+
+
     private void loadStateAndDetermineMode() {
         new Thread(() -> {
             boolean isFrozen = false;
+            boolean isFocusMode = false;
             if (targetPackageName != null) {
                 FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
                 if (frozenApp != null && frozenApp.isFrozen) {
@@ -70,7 +83,13 @@ public class BlockActivity extends AppCompatActivity {
                 }
             }
 
+            FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
+            if (activeSession != null && !isFrozen) {
+                isFocusMode = true;
+            }
+
             final boolean finalIsFrozen = isFrozen;
+            final boolean finalIsFocusMode = isFocusMode;
 
             long todayStart = getTodayStart();
             todayUnlockEntity = db.emergencyUnlockDao().getUnlockByDate(todayStart);
@@ -86,6 +105,9 @@ public class BlockActivity extends AppCompatActivity {
                 if (finalIsFrozen) {
                     tvBlockedMessage.setText("This application is currently FROZEN.");
                     btnForceStop.setVisibility(View.VISIBLE);
+                } else if (finalIsFocusMode) {
+                    tvBlockedMessage.setText("Focus Mode Active. This app is restricted.");
+                    btnForceStop.setVisibility(View.GONE);
                 } else {
                     tvBlockedMessage.setText("This app is restricted by SelfPilot.");
                     btnForceStop.setVisibility(View.GONE);
@@ -106,16 +128,32 @@ public class BlockActivity extends AppCompatActivity {
         if (targetPackageName == null || todayUnlockEntity == null) return;
         
         new Thread(() -> {
+            // 1. Increment daily emergency unlock
             todayUnlockEntity.unlocksUsed++;
             db.emergencyUnlockDao().update(todayUnlockEntity);
 
+            // 2. Set rule unlocked until now + 5 minutes
             RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(targetPackageName);
-            if (rule != null) {
-                rule.unlockedUntil = System.currentTimeMillis() + (15 * 60 * 1000); // 15 minutes
-                db.restrictionRuleDao().update(rule);
+            if (rule == null) {
+                rule = new RestrictionRuleEntity();
+                rule.packageName = targetPackageName;
+                db.restrictionRuleDao().insert(rule);
+                rule = db.restrictionRuleDao().getRuleByPackageName(targetPackageName);
             }
             
-            runOnUiThread(() -> finish());
+            if (rule != null) {
+                rule.unlockedUntil = System.currentTimeMillis() + (5 * 60 * 1000); // 5 minutes
+                db.restrictionRuleDao().update(rule);
+            }
+
+            // 3. If Focus Mode is active, deduct XP by incrementing its emergency use count
+            FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
+            if (activeSession != null) {
+                activeSession.emergencyUnlocksUsed++;
+                db.focusSessionDao().update(activeSession);
+            }
+            
+            runOnUiThread(this::goHome);
         }).start();
     }
 

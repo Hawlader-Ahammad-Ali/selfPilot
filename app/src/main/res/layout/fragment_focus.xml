@@ -21,10 +21,20 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginVertical="24dp"
-        android:text="25:00"
+        android:text="15:00"
         android:textColor="@color/purple_accent_light"
         android:textSize="80sp"
         android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvFocusWarning"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:text="Focus Mode Active. No early exit allowed."
+        android:textColor="@color/warning_yellow"
+        android:textSize="14sp"
+        android:visibility="gone" />
 
     <RadioGroup
         android:id="@+id/rgPresets"
@@ -34,20 +44,36 @@
         android:orientation="horizontal">
 
         <RadioButton
-            android:id="@+id/rb25Min"
+            android:id="@+id/rb15Min"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:checked="true"
-            android:text="25 min"
+            android:text="15m"
             android:textColor="@color/text_primary" />
 
         <RadioButton
-            android:id="@+id/rb50Min"
+            android:id="@+id/rb30Min"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:text="50 min"
+            android:layout_marginEnd="8dp"
+            android:text="30m"
+            android:textColor="@color/text_primary" />
+
+        <RadioButton
+            android:id="@+id/rb60Min"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="1h"
+            android:textColor="@color/text_primary" />
+
+        <RadioButton
+            android:id="@+id/rb120Min"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="2h"
             android:textColor="@color/text_primary" />
 
         <RadioButton
@@ -78,7 +104,7 @@
             android:id="@+id/etCustomMinutes"
             android:layout_width="80dp"
             android:layout_height="wrap_content"
-            android:hint="15"
+            android:hint="45"
             android:inputType="number"
             android:maxLength="3"
             android:textColor="@color/text_primary"
@@ -86,42 +112,93 @@
 
     </LinearLayout>
 
-    <LinearLayout
+    <Button
+        android:id="@+id/btnStart"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_marginBottom="24dp"
+        android:text="Start Focus Session" />
 
-        <Button
-            android:id="@+id/btnStart"
-            android:layout_width="wrap_content"
+    <!-- Session History Stats Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardFocusStats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:cardBackgroundColor="@color/card_background"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:text="Start Focus" />
+            android:orientation="vertical"
+            android:padding="20dp">
 
-        <Button
-            android:id="@+id/btnPause"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:text="Pause"
-            android:visibility="gone" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Today's Session Statistics"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/btnResume"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:text="Resume"
-            android:visibility="gone" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/btnCancel"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Cancel"
-            android:visibility="gone" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-    </LinearLayout>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Sessions Completed"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvFocusSessionsCompleted"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="0"
+                        android:textColor="@color/purple_accent_light"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Focus XP Earned"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvFocusXpEarned"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="0 XP"
+                        android:textColor="@color/success_green"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>

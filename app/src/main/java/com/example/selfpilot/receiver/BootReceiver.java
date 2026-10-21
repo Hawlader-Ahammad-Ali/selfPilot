@@ -4,10 +4,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
+import androidx.core.content.ContextCompat;
+
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.service.FocusTimerService;
 
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -21,8 +24,9 @@ public class BootReceiver extends BroadcastReceiver {
             
             Executors.newSingleThreadExecutor().execute(() -> {
                 AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
-                List<FrozenAppEntity> frozenApps = db.frozenAppDao().getFrozenApps();
                 
+                // 1. Recover Frozen Apps Enforcement
+                List<FrozenAppEntity> frozenApps = db.frozenAppDao().getFrozenApps();
                 if (frozenApps != null) {
                     for (FrozenAppEntity frozen : frozenApps) {
                         if (frozen.isFrozen) {
@@ -42,6 +46,13 @@ public class BootReceiver extends BroadcastReceiver {
                             }
                         }
                     }
+                }
+
+                // 2. Recover Active Focus Timer
+                if (db.focusSessionDao().getActiveSession() != null) {
+                    Intent recoverIntent = new Intent(context, FocusTimerService.class);
+                    recoverIntent.setAction(FocusTimerService.ACTION_RECOVER);
+                    ContextCompat.startForegroundService(context, recoverIntent);
                 }
             });
         }

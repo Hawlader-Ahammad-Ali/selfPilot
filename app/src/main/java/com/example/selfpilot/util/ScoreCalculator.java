@@ -25,9 +25,13 @@ public class ScoreCalculator {
         return Math.max(0, 100 - penalty);
     }
 
-    public static int calculateStudyPoints(long studyMinutes, int completedFocusSessions) {
+    public static int calculateStudyPoints(long studyMinutes, List<FocusSessionEntity> completedSessions) {
         int points = (int) studyMinutes;
-        points += (completedFocusSessions * 10); // 10 bonus points per completed session
+        if (completedSessions != null) {
+            for (FocusSessionEntity session : completedSessions) {
+                points += session.xpEarned;
+            }
+        }
         return points;
     }
 
@@ -88,15 +92,11 @@ public class ScoreCalculator {
             }
         }
 
-        // Fetch completed focus sessions count today
-        int completedSessions = 0;
-        List<FocusSessionEntity> sessions = db.focusSessionDao().getSessionsByDate(startOfDay);
-        if (sessions != null) {
-            completedSessions = sessions.size();
-        }
+        // Fetch completed focus sessions today
+        List<FocusSessionEntity> sessions = db.focusSessionDao().getCompletedSessionsToday(startOfDay);
 
         int disciplineScore = calculateDisciplineScore(nonStudyMinutes, 240); // 4 hour budget default
-        int studyPoints = calculateStudyPoints(studyMinutes, completedSessions);
+        int studyPoints = calculateStudyPoints(studyMinutes, sessions);
 
         HonorScoreEntity todayScore = honorScoreDao.getScoreByDate(startOfDay);
         int currentStreak = 1;

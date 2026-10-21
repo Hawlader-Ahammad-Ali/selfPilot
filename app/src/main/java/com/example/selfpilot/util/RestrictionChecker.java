@@ -4,6 +4,8 @@ import android.app.usage.UsageStats;
 import android.content.Context;
 
 import com.example.selfpilot.data.AppDatabase;
+import com.example.selfpilot.data.AppInfoEntity;
+import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
@@ -13,7 +15,7 @@ import java.util.Map;
 public class RestrictionChecker {
 
     /**
-     * Checks if a package is currently restricted according to its freeze state, limit, or schedule.
+     * Checks if a package is currently restricted according to its freeze state, limit, schedule, or Focus Mode.
      * Note: This method accesses the database and should be called from a background thread.
      */
     public static boolean isAppRestricted(Context context, String packageName) {
@@ -32,15 +34,25 @@ public class RestrictionChecker {
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
 
-        if (rule == null && frozen == null) return false;
-
         long now = System.currentTimeMillis();
         if (rule != null && now < rule.unlockedUntil) {
-            // Emergency unlocked
+            // Emergency unlocked - unconditionally allow
             return false;
         }
 
         boolean shouldBlock = (rule != null && rule.isBlocked) || (frozen != null && frozen.isFrozen);
+
+        // Check Focus Mode active
+        if (!shouldBlock) {
+            FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
+            if (activeSession != null) {
+                AppInfoEntity appInfo = db.appInfoDao().getAppInfo(packageName);
+                // Block if it's not explicitly marked as a Study App
+                if (appInfo == null || !appInfo.isStudyApp) {
+                    shouldBlock = true;
+                }
+            }
+        }
 
         // Check Daily Limit Exceeded
         if (!shouldBlock && rule != null && rule.limitMinutes > 0) {

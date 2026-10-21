@@ -5,15 +5,24 @@ import androidx.room.PrimaryKey;
 
 @Entity(tableName = "focus_sessions")
 public class FocusSessionEntity {
-
     @PrimaryKey(autoGenerate = true)
     public int id;
 
-    public long date;
+    public long startTime;
+    public long endTime;
     public int durationMinutes;
+    public int emergencyUnlocksUsed;
+    public int xpEarned;
+    public String status; // "ACTIVE", "COMPLETED", "FAILED"
 
-    public FocusSessionEntity(long date, int durationMinutes) {
-        this.date = date;
+    public FocusSessionEntity() {}
+
+    public FocusSessionEntity(long startTime, long endTime, int durationMinutes) {
+        this.startTime = startTime;
+        this.endTime = endTime;
         this.durationMinutes = durationMinutes;
+        this.emergencyUnlocksUsed = 0;
+        this.xpEarned = 0;
+        this.status = "ACTIVE";
     }
 }
