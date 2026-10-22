@@ -43,7 +43,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".ui.freezer.AppFreezerActivity"
+            android:name=".ui.freezer.FreezerMainActivity"
             android:exported="false" />
 
         <service

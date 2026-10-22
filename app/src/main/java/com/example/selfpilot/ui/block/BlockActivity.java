@@ -120,6 +120,7 @@ public class BlockActivity extends AppCompatActivity {
                 if (finalIsFrozen) {
                     tvBlockedMessage.setText("This application is currently FROZEN.");
                     btnForceStop.setVisibility(View.VISIBLE);
+                    btnEmergencyUnlock.setVisibility(View.GONE);
                 } else if (finalIsExamMode) {
                     tvBlockedMessage.setText("Exam Mode Active.\nThis app is restricted to help you study.");
                     btnForceStop.setVisibility(View.GONE);
@@ -131,12 +132,15 @@ public class BlockActivity extends AppCompatActivity {
                     btnForceStop.setVisibility(View.GONE);
                 }
 
-                if (todayUnlockEntity.unlocksUsed < 3) {
-                    btnEmergencyUnlock.setEnabled(true);
-                    btnEmergencyUnlock.setText("Emergency Unlock (" + (3 - todayUnlockEntity.unlocksUsed) + " left)");
-                } else {
-                    btnEmergencyUnlock.setEnabled(false);
-                    btnEmergencyUnlock.setText("No Unlocks Left Today");
+                if (!finalIsFrozen) {
+                    btnEmergencyUnlock.setVisibility(View.VISIBLE);
+                    if (todayUnlockEntity.unlocksUsed < 3) {
+                        btnEmergencyUnlock.setEnabled(true);
+                        btnEmergencyUnlock.setText("Emergency Unlock (" + (3 - todayUnlockEntity.unlocksUsed) + " left)");
+                    } else {
+                        btnEmergencyUnlock.setEnabled(false);
+                        btnEmergencyUnlock.setText("No Unlocks Left Today");
+                    }
                 }
             });
         }).start();

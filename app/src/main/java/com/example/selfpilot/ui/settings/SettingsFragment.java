@@ -24,7 +24,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.ui.exam.ExamModeActivity;
-import com.example.selfpilot.ui.freezer.AppFreezerActivity;
+import com.example.selfpilot.ui.freezer.FreezerMainActivity;
 import com.example.selfpilot.util.UsageUtil;
 
 import java.util.Calendar;
@@ -116,7 +116,7 @@ public class SettingsFragment extends Fragment {
 
         if (btnAppFreezerSettings != null) {
             btnAppFreezerSettings.setOnClickListener(v -> {
-                Intent intent = new Intent(getContext(), AppFreezerActivity.class);
+                Intent intent = new Intent(getContext(), FreezerMainActivity.class);
                 startActivity(intent);
             });
         }

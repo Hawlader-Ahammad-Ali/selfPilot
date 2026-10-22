@@ -22,8 +22,16 @@ public class SelfPilotNotificationListener extends NotificationListenerService {
         if (packageName == null || packageName.equals(getPackageName())) return;
 
         executorService.execute(() -> {
-            if (RestrictionChecker.isAppRestricted(this, packageName)) {
-                AppDatabase db = AppDatabase.getDatabase(this);
+            boolean isRestrictedBySystem = RestrictionChecker.isAppRestricted(this, packageName);
+            
+            AppDatabase db = AppDatabase.getDatabase(this);
+            boolean isFrozen = db.frozenAppDao().getFrozenApp(packageName) != null;
+
+            if (isFrozen) {
+                // Bug 3 Fix: If an app is explicitly marked as frozen, we actively suppress its notifications
+                // if the user has granted the Notification Listener permission.
+                cancelNotification(sbn.getKey());
+            } else if (isRestrictedBySystem) {
                 RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
                 if (rule != null && rule.suppressNotifications) {
                     cancelNotification(sbn.getKey());

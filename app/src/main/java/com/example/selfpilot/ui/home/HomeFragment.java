@@ -27,7 +27,7 @@ import com.example.selfpilot.data.HonorScoreDao;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.ui.exam.ExamModeActivity;
-import com.example.selfpilot.ui.freezer.AppFreezerActivity;
+import com.example.selfpilot.ui.freezer.FreezerMainActivity;
 import com.example.selfpilot.util.ScoreCalculator;
 import com.example.selfpilot.util.UsageUtil;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
@@ -96,7 +96,7 @@ public class HomeFragment extends Fragment {
         btnShortcutApps.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_apps));
         btnShortcutFocus.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_focus));
         btnShortcutFreezer.setOnClickListener(v -> {
-            Intent intent = new Intent(getContext(), AppFreezerActivity.class);
+            Intent intent = new Intent(getContext(), FreezerMainActivity.class);
             startActivity(intent);
         });
         btnShortcutExam.setOnClickListener(v -> {
