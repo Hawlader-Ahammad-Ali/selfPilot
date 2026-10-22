@@ -2,4 +2,22 @@
     <string name="app_name">SelfPilot</string>
     <string name="usage_granted">Usage Access: Granted (Active)</string>
     <string name="usage_denied">Usage Access: Not Granted (Tap button below)</string>
+
+    <!-- Analytics Strings -->
+    <string name="analytics_dashboard">Analytics Dashboard</string>
+    <string name="export">Export</string>
+    <string name="last_7_days">Last 7 Days</string>
+    <string name="last_30_days">Last 30 Days</string>
+    <string name="showing_data_7_days">Showing data for past 7 days.</string>
+    <string name="productive_vs_screen_time">Productive vs Screen Time</string>
+    <string name="app_wise_usage_breakdown">App-wise Usage Breakdown</string>
+    <string name="focus_sessions">Focus Sessions</string>
+    <string name="exam_sessions">Exam Sessions</string>
+    <string name="productive_time">Productive Time</string>
+    <string name="total_screen_time">Total Screen Time</string>
+    <string name="honor_score_avg">Honor Score (Avg)</string>
+    <string name="goal_achieved">Goal Achieved</string>
+    <string name="zero">0</string>
+    <string name="zero_h">0h</string>
+    <string name="zero_percent">0%</string>
 </resources>

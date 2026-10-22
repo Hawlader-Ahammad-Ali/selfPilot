@@ -15,8 +15,10 @@ import androidx.room.RoomDatabase;
         EmergencyUnlockEntity.class,
         ExamProfileEntity.class,
         AchievementEntity.class,
-        FrozenAppEntity.class
-}, version = 10, exportSchema = false)
+        FrozenAppEntity.class,
+        GoalEntity.class,
+        ExportHistoryEntity.class
+}, version = 11, exportSchema = false)
 public abstract class AppDatabase extends RoomDatabase {
 
     public abstract AppUsageDao appUsageDao();
@@ -28,6 +30,8 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract ExamProfileDao examProfileDao();
     public abstract AchievementDao achievementDao();
     public abstract FrozenAppDao frozenAppDao();
+    public abstract GoalDao goalDao();
+    public abstract ExportHistoryDao exportHistoryDao();
 
     private static volatile AppDatabase INSTANCE;
 
