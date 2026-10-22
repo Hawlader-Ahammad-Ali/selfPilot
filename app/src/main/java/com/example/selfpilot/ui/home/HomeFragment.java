@@ -41,8 +41,6 @@ import java.util.concurrent.Executors;
 
 public class HomeFragment extends Fragment {
 
-    private TextView tvHomeStreakLevel;
-    private TextView tvHomeModeStatus;
     private TextView tvTotalScreenTime;
     private LinearProgressIndicator progressScreenTimeBudget;
     private TextView tvScreenTimeBudget;
@@ -53,12 +51,13 @@ public class HomeFragment extends Fragment {
     private TextView tvRestrictedAppsHome;
     private TextView tvEmergencyUnlocksHome;
 
-    private Button btnShortcutApps;
-    private Button btnShortcutFocus;
-    private Button btnShortcutFreezer;
-    private Button btnShortcutExam;
-    private Button btnShortcutAnalytics;
-    private Button btnShortcutSettings;
+    private View btnShortcutApps;
+    private View btnShortcutFocus;
+    private View btnShortcutFreezer;
+    private View btnShortcutExam;
+    private View btnShortcutAnalytics;
+    private View btnShortcutSettings;
+    private View btnShortcutSettingsTop;
 
     private ExecutorService executorService;
 
@@ -67,8 +66,6 @@ public class HomeFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
-        tvHomeStreakLevel = view.findViewById(R.id.tvHomeStreakLevel);
-        tvHomeModeStatus = view.findViewById(R.id.tvHomeModeStatus);
         tvTotalScreenTime = view.findViewById(R.id.tvTotalScreenTime);
         progressScreenTimeBudget = view.findViewById(R.id.progressScreenTimeBudget);
         tvScreenTimeBudget = view.findViewById(R.id.tvScreenTimeBudget);
@@ -79,12 +76,13 @@ public class HomeFragment extends Fragment {
         tvRestrictedAppsHome = view.findViewById(R.id.tvRestrictedAppsHome);
         tvEmergencyUnlocksHome = view.findViewById(R.id.tvEmergencyUnlocksHome);
 
-        btnShortcutApps = view.findViewById(R.id.btnShortcutApps);
-        btnShortcutFocus = view.findViewById(R.id.btnShortcutFocus);
-        btnShortcutFreezer = view.findViewById(R.id.btnShortcutFreezer);
-        btnShortcutExam = view.findViewById(R.id.btnShortcutExam);
-        btnShortcutAnalytics = view.findViewById(R.id.btnShortcutAnalytics);
-        btnShortcutSettings = view.findViewById(R.id.btnShortcutSettings);
+        btnShortcutApps = view.findViewById(R.id.cardActionManageApps);
+        btnShortcutFocus = view.findViewById(R.id.cardActionStartFocus);
+        btnShortcutFreezer = view.findViewById(R.id.cardActionFreezer);
+        btnShortcutExam = view.findViewById(R.id.cardActionExamMode);
+        btnShortcutAnalytics = view.findViewById(R.id.cardActionAnalytics);
+        btnShortcutSettings = view.findViewById(R.id.cardActionSettings);
+        btnShortcutSettingsTop = view.findViewById(R.id.btnShortcutSettingsTop);
 
         setupShortcuts(view);
 
@@ -103,8 +101,9 @@ public class HomeFragment extends Fragment {
             Intent intent = new Intent(getContext(), ExamModeActivity.class);
             startActivity(intent);
         });
-        btnShortcutAnalytics.setOnClickListener(v -> showAnalyticsDialog());
+        btnShortcutAnalytics.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_analytics));
         btnShortcutSettings.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_settings));
+        btnShortcutSettingsTop.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_settings));
     }
 
     @Override
@@ -162,7 +161,7 @@ public class HomeFragment extends Fragment {
 
             long hours = totalMins / 60;
             long mins = totalMins % 60;
-            String totalScreenTimeText = hours + " hrs " + mins + " mins";
+            String totalScreenTimeText = hours + "h " + mins + "m";
 
             // 2. Budget Limit
             SharedPreferences prefs = context.getSharedPreferences("SelfPilotPrefs", Context.MODE_PRIVATE);
@@ -170,16 +169,15 @@ public class HomeFragment extends Fragment {
             long remainingMins = Math.max(0, dailyBudgetMins - totalMins);
             int budgetProgress = Math.min(100, (int) ((totalMins * 100) / Math.max(1, dailyBudgetMins)));
 
-            String budgetText = "Daily Limit: " + (dailyBudgetMins / 60) + "h " + (dailyBudgetMins % 60) + "m (Remaining: " + (remainingMins / 60) + "h " + (remainingMins % 60) + "m)";
+            String budgetText = "Daily limit • " + (dailyBudgetMins / 60) + "h / " + (remainingMins / 60) + "h " + (remainingMins % 60) + "m remaining";
 
             // 3. Honor Score & Calculation
             ScoreCalculator.calculateAndSaveDailyScore(context);
             HonorScoreDao honorScoreDao = db.honorScoreDao();
             HonorScoreEntity todayScore = honorScoreDao.getScoreByDate(startOfDay);
 
-            String levelText = "Level: " + (todayScore != null ? todayScore.getHonorLevel() : "Beginner") + " • " + (todayScore != null ? todayScore.getStreak() : 1) + "-Day Streak";
             String scoreVal = todayScore != null ? String.valueOf(todayScore.getDisciplineScore()) : "100";
-            String pointsVal = todayScore != null ? todayScore.getStudyPoints() + " pts" : "0 pts";
+            String pointsVal = todayScore != null ? String.valueOf(todayScore.getStudyPoints()) : "0";
 
             // 4. Restricted & Frozen Apps Count
             List<RestrictionRuleEntity> rules = db.restrictionRuleDao().getAllRules();
@@ -199,22 +197,12 @@ public class HomeFragment extends Fragment {
             int usedUnlocks = unlockEntity != null ? unlockEntity.unlocksUsed : 0;
             int remainingUnlocks = Math.max(0, 3 - usedUnlocks);
 
-            // 5. Active Exam / Study Mode status
-            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
-            ExamProfileEntity activeExam = activeExams != null && !activeExams.isEmpty() ? activeExams.get(0) : null;
-            
-            String modeStatusText = (activeExam != null && activeExam.isActive)
-                    ? "Mode: EXAM MODE Active (" + activeExam.examName + ")"
-                    : "Mode: Standard Study Mode";
-
             final int finalRestrictedCount = restrictedCount;
             final int finalRemainingUnlocks = remainingUnlocks;
 
             // Update UI
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
-                    tvHomeStreakLevel.setText(levelText);
-                    tvHomeModeStatus.setText(modeStatusText);
                     tvTotalScreenTime.setText(totalScreenTimeText);
                     progressScreenTimeBudget.setProgress(budgetProgress);
                     tvScreenTimeBudget.setText(budgetText);
@@ -222,8 +210,8 @@ public class HomeFragment extends Fragment {
                     tvNonStudyTimeHome.setText(nonStudyMins + "m");
                     tvDisciplineScoreHome.setText(scoreVal);
                     tvStudyPointsHome.setText(pointsVal);
-                    tvRestrictedAppsHome.setText(finalRestrictedCount + " Apps");
-                    tvEmergencyUnlocksHome.setText(finalRemainingUnlocks + " / 3 Left");
+                    tvRestrictedAppsHome.setText(String.valueOf(finalRestrictedCount));
+                    tvEmergencyUnlocksHome.setText(usedUnlocks + " / 3");
                 });
             }
         });

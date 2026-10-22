@@ -5,17 +5,17 @@
         android:icon="@android:drawable/ic_menu_today"
         android:title="Home" />
     <item
-        android:id="@+id/navigation_apps"
-        android:icon="@android:drawable/ic_menu_sort_by_size"
-        android:title="Apps" />
-    <item
         android:id="@+id/navigation_focus"
-        android:icon="@android:drawable/ic_menu_view"
+        android:icon="@android:drawable/ic_media_play"
         android:title="Focus" />
     <item
-        android:id="@+id/navigation_score"
-        android:icon="@android:drawable/ic_menu_sort_alphabetically"
-        android:title="Score" />
+        android:id="@+id/navigation_analytics"
+        android:icon="@android:drawable/ic_menu_sort_by_size"
+        android:title="Analytics" />
+    <item
+        android:id="@+id/navigation_apps"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Apps" />
     <item
         android:id="@+id/navigation_settings"
         android:icon="@android:drawable/ic_menu_preferences"
