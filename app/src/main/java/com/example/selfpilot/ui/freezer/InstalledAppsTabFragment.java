@@ -306,6 +306,7 @@ public class InstalledAppsTabFragment extends Fragment {
                 holder.cbAppSelect.setChecked(item.isSelected);
                 selectionCallback.run();
             });
+            holder.btnUnfreezeItem.setVisibility(View.GONE);
         }
 
         @Override
@@ -317,12 +318,14 @@ public class InstalledAppsTabFragment extends Fragment {
             ImageView ivAppIcon;
             TextView tvAppName;
             CheckBox cbAppSelect;
+            Button btnUnfreezeItem;
 
             public ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 ivAppIcon = itemView.findViewById(R.id.ivAppIcon);
                 tvAppName = itemView.findViewById(R.id.tvAppName);
                 cbAppSelect = itemView.findViewById(R.id.cbAppSelect);
+                btnUnfreezeItem = itemView.findViewById(R.id.btnUnfreezeItem);
             }
         }
     }

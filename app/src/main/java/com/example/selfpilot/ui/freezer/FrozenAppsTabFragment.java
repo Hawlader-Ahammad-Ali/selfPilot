@@ -297,6 +297,20 @@ public class FrozenAppsTabFragment extends Fragment {
                 }
             }
 
+            holder.btnUnfreezeItem.setVisibility(View.VISIBLE);
+            holder.btnUnfreezeItem.setOnClickListener(v -> {
+                new AlertDialog.Builder(requireContext())
+                        .setTitle("Unfreeze App?")
+                        .setMessage("Do you want to unfreeze " + item.appName + "?")
+                        .setPositiveButton("Unfreeze", (dialog, which) -> {
+                            List<FrozenAppEntity> singleList = new ArrayList<>();
+                            singleList.add(item);
+                            unfreezeApps(singleList);
+                        })
+                        .setNegativeButton("Cancel", null)
+                        .show();
+            });
+
             holder.itemView.setOnClickListener(v -> {
                 boolean isCurrentlyChecked = filteredSelectionStates.get(position);
                 filteredSelectionStates.set(position, !isCurrentlyChecked);
@@ -319,6 +333,7 @@ public class FrozenAppsTabFragment extends Fragment {
             TextView tvAppName;
             TextView tvAppStatus;
             CheckBox cbAppSelect;
+            Button btnUnfreezeItem;
 
             public ViewHolder(@NonNull View itemView) {
                 super(itemView);
@@ -326,6 +341,7 @@ public class FrozenAppsTabFragment extends Fragment {
                 tvAppName = itemView.findViewById(R.id.tvAppName);
                 tvAppStatus = itemView.findViewById(R.id.tvAppStatus);
                 cbAppSelect = itemView.findViewById(R.id.cbAppSelect);
+                btnUnfreezeItem = itemView.findViewById(R.id.btnUnfreezeItem);
             }
         }
     }
