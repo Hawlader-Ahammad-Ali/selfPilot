@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_dark"
+    android:background="@color/exam_bg"
     android:orientation="vertical"
     android:paddingTop="8dp">
 
@@ -11,34 +11,47 @@
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="12dp"
-        android:layout_marginBottom="8dp"
-        app:cardBackgroundColor="@color/card_background"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="2dp">
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginTop="8dp"
+        app:cardBackgroundColor="@color/exam_card"
+        app:cardCornerRadius="16dp"
+        app:strokeColor="@color/exam_border"
+        app:strokeWidth="1dp"
+        app:cardElevation="0dp">
 
-        <EditText
-            android:id="@+id/etSearchApp"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:background="@null"
-            android:drawableStart="@android:drawable/ic_menu_search"
-            android:drawablePadding="12dp"
-            android:hint="Search installed apps..."
-            android:inputType="text"
-            android:paddingHorizontal="16dp"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_secondary"
-            android:textSize="14sp" />
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="16dp">
 
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/ic_menu_search"
+                app:tint="@color/exam_text_secondary"/>
+
+            <EditText
+                android:id="@+id/etSearchApp"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@null"
+                android:layout_marginStart="12dp"
+                android:hint="Search installed apps..."
+                android:inputType="text"
+                android:textColor="@color/exam_text_primary"
+                android:textColorHint="@color/exam_text_secondary"
+                android:textSize="16sp" />
+        </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
     <!-- Filter Chips -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:paddingHorizontal="12dp"
+        android:layout_marginBottom="12dp"
+        android:paddingHorizontal="16dp"
         android:scrollbars="none">
 
         <com.google.android.material.chip.ChipGroup

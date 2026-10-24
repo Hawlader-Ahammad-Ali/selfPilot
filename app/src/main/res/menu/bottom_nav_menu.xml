@@ -14,7 +14,7 @@
         android:title="Analytics" />
     <item
         android:id="@+id/navigation_apps"
-        android:icon="@android:drawable/ic_menu_manage"
+        android:icon="@android:drawable/ic_dialog_dialer"
         android:title="Apps" />
     <item
         android:id="@+id/navigation_settings"
