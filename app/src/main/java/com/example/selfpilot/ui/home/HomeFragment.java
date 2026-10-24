@@ -91,8 +91,8 @@ public class HomeFragment extends Fragment {
     }
 
     private void setupShortcuts(View root) {
-        btnShortcutApps.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_apps));
-        btnShortcutFocus.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_focus));
+        btnShortcutApps.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_apps));
+        btnShortcutFocus.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_focus));
         btnShortcutFreezer.setOnClickListener(v -> {
             Intent intent = new Intent(getContext(), FreezerMainActivity.class);
             startActivity(intent);
@@ -101,9 +101,9 @@ public class HomeFragment extends Fragment {
             Intent intent = new Intent(getContext(), ExamModeActivity.class);
             startActivity(intent);
         });
-        btnShortcutAnalytics.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_analytics));
-        btnShortcutSettings.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_settings));
-        btnShortcutSettingsTop.setOnClickListener(v -> Navigation.findNavController(root).navigate(R.id.navigation_settings));
+        btnShortcutAnalytics.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_analytics));
+        btnShortcutSettings.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_settings));
+        btnShortcutSettingsTop.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_settings));
     }
 
     @Override

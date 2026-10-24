@@ -117,90 +117,105 @@ public class AnalyticsFragment extends Fragment {
         pbAnalyticsLoading.setVisibility(View.VISIBLE);
         tvDateRangeInfo.setText("Showing data for past " + daysToQuery + " days.");
 
+        Context safeContext = getContext();
+        if (safeContext == null) return;
+
         executorService.execute(() -> {
-            long now = System.currentTimeMillis();
-            long startMillis = now - (daysToQuery * 86400000L);
+            try {
+                long now = System.currentTimeMillis();
+                long startMillis = now - (daysToQuery * 86400000L);
 
-            // 1. Fetch Focus Sessions
-            List<FocusSessionEntity> sessions = db.focusSessionDao().getSessionsByDate(startMillis);
-            int focusSessionsCount = 0;
-            long productiveMillis = 0;
-            if (sessions != null) {
-                for (FocusSessionEntity s : sessions) {
-                    if ("COMPLETED".equals(s.status)) {
-                        focusSessionsCount++;
-                        productiveMillis += (s.durationMinutes * 60 * 1000L);
+                // 1. Fetch Focus Sessions
+                List<FocusSessionEntity> sessions = db.focusSessionDao().getSessionsByDate(startMillis);
+                int focusSessionsCount = 0;
+                long productiveMillis = 0;
+                if (sessions != null) {
+                    for (FocusSessionEntity s : sessions) {
+                        if ("COMPLETED".equals(s.status)) {
+                            focusSessionsCount++;
+                            productiveMillis += (s.durationMinutes * 60 * 1000L);
+                        }
                     }
                 }
-            }
 
-            // 2. Fetch Screen Time via UsageStats
-            Map<String, UsageStats> stats = UsageUtil.getUsageStats(requireContext(), startMillis, now);
-            long totalScreenMillis = 0;
-            List<PieEntry> pieEntries = new ArrayList<>();
-            
-            if (stats != null) {
-                // Group by top apps
-                List<Map.Entry<String, UsageStats>> sortedStats = new ArrayList<>(stats.entrySet());
-                sortedStats.sort((e1, e2) -> Long.compare(e2.getValue().getTotalTimeInForeground(), e1.getValue().getTotalTimeInForeground()));
+                // 2. Fetch Screen Time via UsageStats
+                Map<String, UsageStats> stats = UsageUtil.getUsageStats(safeContext, startMillis, now);
+                long totalScreenMillis = 0;
+                List<PieEntry> pieEntries = new ArrayList<>();
+                
+                if (stats != null) {
+                    // Group by top apps
+                    List<Map.Entry<String, UsageStats>> sortedStats = new ArrayList<>(stats.entrySet());
+                    sortedStats.sort((e1, e2) -> Long.compare(e2.getValue().getTotalTimeInForeground(), e1.getValue().getTotalTimeInForeground()));
 
-                int limit = 5;
-                for (int i = 0; i < sortedStats.size() && i < limit; i++) {
-                    UsageStats stat = sortedStats.get(i).getValue();
-                    long time = stat.getTotalTimeInForeground();
-                    if (time > 0) {
-                        totalScreenMillis += time;
-                        String appName = sortedStats.get(i).getKey();
+                    int limit = 5;
+                    for (int i = 0; i < sortedStats.size() && i < limit; i++) {
+                        UsageStats stat = sortedStats.get(i).getValue();
+                        long time = stat.getTotalTimeInForeground();
+                        if (time > 0) {
+                            totalScreenMillis += time;
+                            String appName = sortedStats.get(i).getKey();
+                            try {
+                                ApplicationInfo ai = packageManager.getApplicationInfo(appName, 0);
+                                appName = packageManager.getApplicationLabel(ai).toString();
+                            } catch (Exception ignored) {}
+                            pieEntries.add(new PieEntry((float) (time / 60000), appName));
+                        }
+                    }
+                    // Add "Others"
+                    long otherMillis = 0;
+                    for (int i = limit; i < sortedStats.size(); i++) {
+                        otherMillis += sortedStats.get(i).getValue().getTotalTimeInForeground();
+                    }
+                    totalScreenMillis += otherMillis;
+                    if (otherMillis > 0) {
+                        pieEntries.add(new PieEntry((float) (otherMillis / 60000), "Others"));
+                    }
+                }
+
+                if (pieEntries.isEmpty()) {
+                    pieEntries.add(new PieEntry(1f, "No Data"));
+                }
+
+                // Prepare Data Models
+                final int finalFocusSessions = focusSessionsCount;
+                final long finalProductiveHours = (productiveMillis / 60000) / 60;
+                final long finalScreenHours = (totalScreenMillis / 60000) / 60;
+
+                List<BarEntry> barEntries = new ArrayList<>();
+                barEntries.add(new BarEntry(1f, (float) finalProductiveHours));
+                barEntries.add(new BarEntry(2f, (float) finalScreenHours));
+                BarDataSet barDataSet = new BarDataSet(barEntries, "Hours");
+                barDataSet.setColors(Color.parseColor("#10B981"), Color.parseColor("#3B82F6"));
+                barDataSet.setValueTextColor(Color.WHITE);
+                BarData barData = new BarData(barDataSet);
+
+                PieDataSet pieDataSet = new PieDataSet(pieEntries, "Top Apps");
+                pieDataSet.setColors(new int[]{Color.parseColor("#3B82F6"), Color.parseColor("#8B5CF6"), Color.parseColor("#10B981"), Color.parseColor("#F59E0B"), Color.parseColor("#EF4444")});
+                pieDataSet.setValueTextColor(Color.WHITE);
+                PieData pieData = new PieData(pieDataSet);
+
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
                         try {
-                            ApplicationInfo ai = packageManager.getApplicationInfo(appName, 0);
-                            appName = packageManager.getApplicationLabel(ai).toString();
+                            pbAnalyticsLoading.setVisibility(View.GONE);
+                            tvFocusSessionsTotal.setText(String.valueOf(finalFocusSessions));
+                            tvProductiveTimeAvg.setText(finalProductiveHours + "h");
+                            tvScreenTimeAvg.setText(finalScreenHours + "h");
+
+                            if (mainBarChart != null) {
+                                mainBarChart.setData(barData);
+                                mainBarChart.invalidate();
+                            }
+
+                            if (appUsagePieChart != null) {
+                                appUsagePieChart.setData(pieData);
+                                appUsagePieChart.invalidate();
+                            }
                         } catch (Exception ignored) {}
-                        pieEntries.add(new PieEntry((float) (time / 60000), appName));
-                    }
+                    });
                 }
-                // Add "Others"
-                long otherMillis = 0;
-                for (int i = limit; i < sortedStats.size(); i++) {
-                    otherMillis += sortedStats.get(i).getValue().getTotalTimeInForeground();
-                }
-                totalScreenMillis += otherMillis;
-                if (otherMillis > 0) {
-                    pieEntries.add(new PieEntry((float) (otherMillis / 60000), "Others"));
-                }
-            }
-
-            // Prepare Data Models
-            final int finalFocusSessions = focusSessionsCount;
-            final long finalProductiveHours = (productiveMillis / 60000) / 60;
-            final long finalScreenHours = (totalScreenMillis / 60000) / 60;
-
-            List<BarEntry> barEntries = new ArrayList<>();
-            barEntries.add(new BarEntry(1f, finalProductiveHours));
-            barEntries.add(new BarEntry(2f, finalScreenHours));
-            BarDataSet barDataSet = new BarDataSet(barEntries, "Hours");
-            barDataSet.setColors(Color.parseColor("#10B981"), Color.parseColor("#3B82F6"));
-            barDataSet.setValueTextColor(Color.WHITE);
-            BarData barData = new BarData(barDataSet);
-
-            PieDataSet pieDataSet = new PieDataSet(pieEntries, "Top Apps");
-            pieDataSet.setColors(new int[]{Color.parseColor("#3B82F6"), Color.parseColor("#8B5CF6"), Color.parseColor("#10B981"), Color.parseColor("#F59E0B"), Color.parseColor("#EF4444")});
-            pieDataSet.setValueTextColor(Color.WHITE);
-            PieData pieData = new PieData(pieDataSet);
-
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    pbAnalyticsLoading.setVisibility(View.GONE);
-                    tvFocusSessionsTotal.setText(String.valueOf(finalFocusSessions));
-                    tvProductiveTimeAvg.setText(finalProductiveHours + "h");
-                    tvScreenTimeAvg.setText(finalScreenHours + "h");
-
-                    mainBarChart.setData(barData);
-                    mainBarChart.invalidate();
-
-                    appUsagePieChart.setData(pieData);
-                    appUsagePieChart.invalidate();
-                });
-            }
+            } catch (Exception ignored) {}
         });
     }
 
