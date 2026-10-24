@@ -33,7 +33,24 @@ public class UsageUtil {
         if (usm == null) {
             return null;
         }
-        return usm.queryAndAggregateUsageStats(startTime, endTime);
+        
+        // Use INTERVAL_DAILY for better historical data retrieval
+        List<UsageStats> queryUsageStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+        if (queryUsageStats == null || queryUsageStats.isEmpty()) {
+            return null;
+        }
+        
+        Map<String, UsageStats> aggregatedStats = new java.util.HashMap<>();
+        for (UsageStats stats : queryUsageStats) {
+            String packageName = stats.getPackageName();
+            if (aggregatedStats.containsKey(packageName)) {
+                UsageStats existing = aggregatedStats.get(packageName);
+                existing.add(stats);
+            } else {
+                aggregatedStats.put(packageName, stats);
+            }
+        }
+        return aggregatedStats;
     }
 
     public static List<ApplicationInfo> getInstalledApps(Context context) {
