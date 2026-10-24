@@ -107,57 +107,60 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
             notifyItemChanged(position);
         });
 
-        holder.itemView.setOnClickListener(v -> showAppDetailsDialog(v.getContext(), appInfo, position));
+        holder.itemView.setOnClickListener(v -> {
+            try {
+                showAppDetailsDialog(v.getContext(), appInfo, position);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void showAppDetailsDialog(Context context, AppInfoEntity appInfo, int position) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
-        builder.setTitle(appInfo.appName);
+        View dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_app_config, null);
+        builder.setView(dialogView);
 
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 20, 40, 20);
+        AlertDialog dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
-        TextView tvInfo = new TextView(context);
-        tvInfo.setText("Configure restrictions, limits, and notification behavior:");
-        tvInfo.setPadding(0, 0, 0, 16);
-        layout.addView(tvInfo);
+        ImageView ivDialogAppIcon = dialogView.findViewById(R.id.ivDialogAppIcon);
+        TextView tvDialogAppName = dialogView.findViewById(R.id.tvDialogAppName);
+        TextView tvDialogAppClassification = dialogView.findViewById(R.id.tvDialogAppClassification);
+        View btnDialogClose = dialogView.findViewById(R.id.btnDialogClose);
 
-        MaterialSwitch switchFreeze = new MaterialSwitch(context);
-        switchFreeze.setText("App Freezer (Freeze App)");
+        MaterialSwitch switchFreeze = dialogView.findViewById(R.id.switchFreeze);
+        MaterialSwitch switchBlock = dialogView.findViewById(R.id.switchBlock);
+        MaterialSwitch switchNotifications = dialogView.findViewById(R.id.switchNotifications);
+        EditText etDailyLimit = dialogView.findViewById(R.id.etDailyLimit);
+
+        View btnDialogCancel = dialogView.findViewById(R.id.btnDialogCancel);
+        View btnDialogSave = dialogView.findViewById(R.id.btnDialogSave);
+
+        try {
+            Drawable icon = packageManager.getApplicationIcon(appInfo.packageName);
+            ivDialogAppIcon.setImageDrawable(icon);
+        } catch (PackageManager.NameNotFoundException ignored) {}
+
+        tvDialogAppName.setText(appInfo.appName);
+        tvDialogAppClassification.setText(appInfo.isStudyApp ? "Study App" : "Non-Study App");
+
         switchFreeze.setChecked(appInfo.isFrozen);
-        layout.addView(switchFreeze);
-
-        MaterialSwitch switchBlock = new MaterialSwitch(context);
-        switchBlock.setText("App Lock (Block Launch)");
         switchBlock.setChecked(appInfo.isBlocked);
-        layout.addView(switchBlock);
-        
-        MaterialSwitch switchNotifications = new MaterialSwitch(context);
-        switchNotifications.setText("Suppress Notifications (When Restricted)");
         switchNotifications.setChecked(appInfo.suppressNotifications);
-        layout.addView(switchNotifications);
+        etDailyLimit.setText(String.valueOf(appInfo.dailyLimitMinutes));
 
-        TextView tvLimitLabel = new TextView(context);
-        tvLimitLabel.setText("Daily Limit (Minutes, 0 = No Limit):");
-        tvLimitLabel.setPadding(0, 16, 0, 4);
-        layout.addView(tvLimitLabel);
+        btnDialogClose.setOnClickListener(v -> dialog.dismiss());
+        btnDialogCancel.setOnClickListener(v -> dialog.dismiss());
 
-        EditText etLimit = new EditText(context);
-        etLimit.setInputType(InputType.TYPE_CLASS_NUMBER);
-        etLimit.setText(String.valueOf(appInfo.dailyLimitMinutes));
-        layout.addView(etLimit);
-
-        builder.setView(layout);
-
-        builder.setPositiveButton("Save", (dialog, which) -> {
+        btnDialogSave.setOnClickListener(v -> {
             boolean isFrozen = switchFreeze.isChecked();
             boolean isBlocked = switchBlock.isChecked();
             boolean suppressNotifs = switchNotifications.isChecked();
             
             int limit = 0;
             try {
-                limit = Integer.parseInt(etLimit.getText().toString().trim());
+                limit = Integer.parseInt(etDailyLimit.getText().toString().trim());
             } catch (Exception ignored) {
             }
 
@@ -190,10 +193,10 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
 
             notifyItemChanged(position);
             Toast.makeText(context, appInfo.appName + " settings updated.", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
         });
 
-        builder.setNegativeButton("Cancel", null);
-        builder.show();
+        dialog.show();
     }
 
     @Override
