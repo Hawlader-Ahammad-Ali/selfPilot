@@ -38,15 +38,16 @@ public class SettingsFragment extends Fragment {
     private TextView tvUsagePermissionStatus;
     private TextView tvAccessibilityStatus;
     private TextView tvNotificationStatus;
-    private Button btnOpenUsageAccess;
-    private Button btnEnableAppLock;
-    private Button btnOpenNotificationAccess;
+    private View btnOpenUsageAccess;
+    private View btnEnableAppLock;
+    private View btnOpenNotificationAccess;
     private EditText etDailyBudgetMins;
-    private Button btnSaveBudget;
-    private Button btnOpenExamModeSettings;
-    private Button btnExportData;
-    private Button btnResetData;
-    private Button btnAppFreezerSettings;
+    private View btnSaveBudget;
+    private View btnOpenExamModeSettings;
+    private View btnExportData;
+    private View btnResetData;
+    private View btnAppFreezerSettings;
+    private View rowGithubProfile;
 
     private ExecutorService executorService;
 
@@ -59,16 +60,17 @@ public class SettingsFragment extends Fragment {
         tvAccessibilityStatus = view.findViewById(R.id.tvAccessibilityStatus);
         tvNotificationStatus = view.findViewById(R.id.tvNotificationStatus);
         
-        btnOpenUsageAccess = view.findViewById(R.id.btnOpenUsageAccess);
-        btnEnableAppLock = view.findViewById(R.id.btn_enable_app_lock);
-        btnOpenNotificationAccess = view.findViewById(R.id.btnOpenNotificationAccess);
+        btnOpenUsageAccess = view.findViewById(R.id.rowUsageAccess);
+        btnEnableAppLock = view.findViewById(R.id.rowAppLockAccessibility);
+        btnOpenNotificationAccess = view.findViewById(R.id.rowNotificationAccess);
         
         etDailyBudgetMins = view.findViewById(R.id.etDailyBudgetMins);
         btnSaveBudget = view.findViewById(R.id.btnSaveBudget);
-        btnOpenExamModeSettings = view.findViewById(R.id.btnOpenExamModeSettings);
-        btnExportData = view.findViewById(R.id.btnExportData);
-        btnResetData = view.findViewById(R.id.btnResetData);
-        btnAppFreezerSettings = view.findViewById(R.id.btnAppFreezerSettings); // we will add this button
+        btnOpenExamModeSettings = view.findViewById(R.id.rowConfigureExamMode);
+        btnExportData = view.findViewById(R.id.rowExportUsageSummary);
+        btnResetData = view.findViewById(R.id.rowResetAppData);
+        btnAppFreezerSettings = view.findViewById(R.id.rowManageAppFreezer);
+        rowGithubProfile = view.findViewById(R.id.rowGithubProfile);
 
         executorService = Executors.newSingleThreadExecutor();
 
@@ -124,6 +126,11 @@ public class SettingsFragment extends Fragment {
         btnExportData.setOnClickListener(v -> exportDataJSON());
 
         btnResetData.setOnClickListener(v -> resetAppData());
+
+        rowGithubProfile.setOnClickListener(v -> {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Hawlader-Ahammad-Ali"));
+            startActivity(browserIntent);
+        });
     }
 
     private void loadSettings() {
@@ -144,24 +151,24 @@ public class SettingsFragment extends Fragment {
 
         boolean usageGranted = UsageUtil.hasUsageStatsPermission(getContext());
         if (usageGranted) {
-            tvUsagePermissionStatus.setText(getString(R.string.usage_granted));
+            tvUsagePermissionStatus.setText("Granted (Active)");
             tvUsagePermissionStatus.setTextColor(getResources().getColor(R.color.success_green, null));
         } else {
-            tvUsagePermissionStatus.setText(getString(R.string.usage_denied));
+            tvUsagePermissionStatus.setText("Not Granted (Tap to enable)");
             tvUsagePermissionStatus.setTextColor(getResources().getColor(R.color.warning_yellow, null));
         }
 
-        tvAccessibilityStatus.setText("App Lock Accessibility: Configured via Settings");
+        tvAccessibilityStatus.setText("Configured via Settings");
         tvAccessibilityStatus.setTextColor(getResources().getColor(R.color.electric_blue, null));
         
         if (tvNotificationStatus != null) {
             Set<String> listeners = NotificationManagerCompat.getEnabledListenerPackages(requireContext());
             boolean hasNotificationAccess = listeners.contains(requireContext().getPackageName());
             if (hasNotificationAccess) {
-                tvNotificationStatus.setText("Notification Suppression: Granted (Active)");
+                tvNotificationStatus.setText("Granted (Active)");
                 tvNotificationStatus.setTextColor(getResources().getColor(R.color.success_green, null));
             } else {
-                tvNotificationStatus.setText("Notification Suppression: Not Granted (Tap Below)");
+                tvNotificationStatus.setText("Not Granted (Tap to enable)");
                 tvNotificationStatus.setTextColor(getResources().getColor(R.color.warning_yellow, null));
             }
         }
