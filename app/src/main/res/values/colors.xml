@@ -21,4 +21,11 @@
 
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="exam_bg">#F3F4F6</color>
+    <color name="exam_card">#FFFFFF</color>
+    <color name="exam_text_primary">#111827</color>
+    <color name="exam_text_secondary">#6B7280</color>
+    <color name="exam_border">#E5E7EB</color>
+    <color name="exam_input_bg">#F9FAFB</color>
 </resources>

@@ -1,55 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_dark">
+    android:background="@color/exam_bg">
+
+    <LinearLayout
+        android:id="@+id/examToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="16dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="?attr/homeAsUpIndicator"
+            app:tint="@color/exam_text_primary"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Exam Period Mode"
+            android:textColor="@color/exam_text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginStart="16dp"/>
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@id/examToolbar"
+        app:layout_constraintBottom_toBottomOf="parent"
         android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Exam Period Mode"
-                android:textColor="@color/purple_accent_light"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Prepare for upcoming examinations with heightened discipline."
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
-
+            <!-- Active Exam Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardActiveExam"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:cardBackgroundColor="@color/card_background"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/exam_card"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="4dp"
                 app:strokeColor="@color/success_green"
                 app:strokeWidth="1dp"
                 android:visibility="gone">
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="20dp">
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -57,26 +70,23 @@
                         android:textColor="@color/success_green"
                         android:textSize="14sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:id="@+id/tvActiveExamName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="Final Exams"
-                        android:textColor="@color/text_primary"
+                        android:textColor="@color/exam_text_primary"
                         android:textSize="20sp"
                         android:textStyle="bold" />
-
                     <TextView
                         android:id="@+id/tvActiveExamGoal"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:text="Daily Goal: 180 Mins"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="@color/exam_text_secondary"
                         android:textSize="14sp" />
-
                     <Button
                         android:id="@+id/btnCancelActiveExam"
                         style="@style/Widget.Material3.Button.OutlinedButton"
@@ -85,18 +95,18 @@
                         android:layout_marginTop="16dp"
                         android:text="Cancel Exam Mode Early"
                         android:textColor="@color/error_red" />
-
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Create Exam Section -->
+            <!-- Schedule New Exam Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                app:cardBackgroundColor="@color/card_background"
+                app:cardBackgroundColor="@color/exam_card"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="4dp">
+                app:strokeColor="@color/exam_border"
+                app:strokeWidth="1dp"
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -108,114 +118,304 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Schedule New Exam"
-                        android:textColor="@color/text_primary"
+                        android:textColor="@color/exam_text_primary"
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <EditText
-                        android:id="@+id/etExamName"
+                    <!-- Exam Name -->
+                    <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:hint="e.g. Midterm Examinations"
-                        android:inputType="text"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary" />
+                        android:layout_height="56dp"
+                        android:layout_marginTop="20dp"
+                        android:background="@drawable/bg_exam_input"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="16dp">
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_menu_agenda"
+                            app:tint="@color/exam_text_secondary" />
+                        <EditText
+                            android:id="@+id/etExamName"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="12dp"
+                            android:background="@null"
+                            android:hint="Exam name (e.g. Midterm)"
+                            android:inputType="text"
+                            android:textColor="@color/exam_text_primary"
+                            android:textColorHint="@color/exam_text_secondary"
+                            android:textSize="16sp" />
+                    </LinearLayout>
 
+                    <!-- Start / End Date -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="16dp"
                         android:orientation="horizontal">
 
-                        <Button
+                        <!-- Start Date -->
+                        <LinearLayout
                             android:id="@+id/btnPickStartDate"
-                            style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="56dp"
                             android:layout_weight="1"
                             android:layout_marginEnd="8dp"
-                            android:text="Start Date" />
+                            android:background="@drawable/bg_exam_button"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@android:drawable/ic_menu_today"
+                                app:tint="@color/purple_accent_light" />
+                            <TextView
+                                android:id="@+id/tvStartDateText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:text="Start date"
+                                android:textColor="@color/exam_text_primary"
+                                android:textSize="15sp" />
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/ic_media_play"
+                                app:tint="@color/exam_text_secondary" />
+                        </LinearLayout>
 
-                        <Button
+                        <!-- End Date -->
+                        <LinearLayout
                             android:id="@+id/btnPickEndDate"
-                            style="@style/Widget.Material3.Button.TonalButton"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="56dp"
                             android:layout_weight="1"
                             android:layout_marginStart="8dp"
-                            android:text="End Date" />
-
+                            android:background="@drawable/bg_exam_button"
+                            android:gravity="center_vertical"
+                            android:paddingHorizontal="16dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <ImageView
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:src="@android:drawable/ic_menu_today"
+                                app:tint="@color/purple_accent_light" />
+                            <TextView
+                                android:id="@+id/tvEndDateText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:text="End date"
+                                android:textColor="@color/exam_text_primary"
+                                android:textSize="15sp" />
+                            <ImageView
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/ic_media_play"
+                                app:tint="@color/exam_text_secondary" />
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <!-- Daily Study Goal -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="Daily Study Goal (Minutes)"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@android:drawable/ic_menu_mylocation"
+                            app:tint="@color/exam_text_secondary" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="Daily study goal (minutes)"
+                            android:textColor="@color/exam_text_secondary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
 
                     <EditText
                         android:id="@+id/etExamDailyGoal"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_exam_input"
+                        android:paddingHorizontal="16dp"
                         android:hint="180"
                         android:inputType="number"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary" />
+                        android:textColor="@color/exam_text_primary"
+                        android:textColorHint="@color/exam_text_secondary"
+                        android:textSize="16sp" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <!-- Apps to Restrict -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="Distracting Apps to Restrict"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@android:drawable/ic_delete"
+                            app:tint="@color/exam_text_secondary" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="Apps to restrict"
+                            android:textColor="@color/exam_text_secondary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
 
-                    <Button
+                    <LinearLayout
                         android:id="@+id/btnSelectRestrictedApps"
-                        style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Select Apps to Restrict (0 selected)" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_height="64dp"
                         android:layout_marginTop="12dp"
-                        android:text="Allowed Apps (Exempt from Exam restrictions)"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
+                        android:background="@drawable/bg_exam_button"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="16dp"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_dialog_dialer"
+                            app:tint="@color/purple_accent_light" />
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:text="Select apps"
+                            android:textColor="@color/exam_text_primary"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:id="@+id/tvRestrictedCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0 selected"
+                            android:textColor="@color/exam_text_secondary"
+                            android:textSize="14sp"
+                            android:layout_marginEnd="8dp"/>
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@android:drawable/ic_media_play"
+                            app:tint="@color/exam_text_secondary" />
+                    </LinearLayout>
 
-                    <Button
-                        android:id="@+id/btnSelectAllowedApps"
-                        style="@style/Widget.Material3.Button.TonalButton"
+                    <!-- Allowed Apps -->
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Select Apps to Allow (0 selected)" />
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@android:drawable/ic_secure"
+                            app:tint="@color/exam_text_secondary" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="Allowed apps (exempt)"
+                            android:textColor="@color/exam_text_secondary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
 
-                    <Button
+                    <LinearLayout
+                        android:id="@+id/btnSelectAllowedApps"
+                        android:layout_width="match_parent"
+                        android:layout_height="64dp"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_exam_button"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="16dp"
+                        android:clickable="true"
+                        android:focusable="true">
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_dialog_dialer"
+                            app:tint="@color/purple_accent_light" />
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:text="Select apps"
+                            android:textColor="@color/exam_text_primary"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:id="@+id/tvAllowedCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0 selected"
+                            android:textColor="@color/exam_text_secondary"
+                            android:textSize="14sp"
+                            android:layout_marginEnd="8dp"/>
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@android:drawable/ic_media_play"
+                            app:tint="@color/exam_text_secondary" />
+                    </LinearLayout>
+
+                    <!-- Submit Button -->
+                    <LinearLayout
                         android:id="@+id/btnSaveExam"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="Schedule Exam Profile" />
+                        android:layout_height="56dp"
+                        android:layout_marginTop="24dp"
+                        android:background="@drawable/bg_exam_primary_button"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:src="@android:drawable/ic_menu_today"
+                            app:tint="@color/white" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="Schedule Exam Profile"
+                            android:textColor="@color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold"/>
+                    </LinearLayout>
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Communication Policy Explanation Card -->
+            <!-- Communication Exceptions Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:layout_marginBottom="80dp"
-                app:cardBackgroundColor="@color/card_background"
+                android:layout_marginBottom="32dp"
+                app:cardBackgroundColor="@color/exam_card"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="4dp">
+                app:strokeColor="@color/exam_border"
+                app:strokeWidth="1dp"
+                app:cardElevation="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -226,22 +426,73 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Communication Exceptions Policy"
-                        android:textColor="@color/text_primary"
-                        android:textSize="16sp"
+                        android:text="Communication Exceptions"
+                        android:textColor="@color/exam_text_primary"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <!-- Allow Calls -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="Note on Platform Limitations:\nAndroid OS does not allow third-party apps to inspect or separate WhatsApp/Telegram calls from messages without private message interception.\n\nRecommended Setup:\nAllow essential messaging apps during study breaks, or configure quiet hours in Android Notification Settings for critical contacts."
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp" />
+                        android:layout_marginTop="20dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_menu_call"
+                            app:tint="@color/exam_text_secondary" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="16dp"
+                            android:text="Allow calls"
+                            android:textColor="@color/exam_text_primary"
+                            android:textSize="16sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switchAllowCalls"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"/>
+                    </LinearLayout>
+
+                    <!-- Allow Messages -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/stat_notify_chat"
+                            app:tint="@color/exam_text_secondary" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="16dp"
+                            android:text="Allow messages during breaks"
+                            android:textColor="@color/exam_text_primary"
+                            android:textSize="16sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switchAllowMessages"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
     </ScrollView>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

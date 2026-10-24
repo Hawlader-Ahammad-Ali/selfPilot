@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background Colors -->
+    <color name="background_dark">#0F172A</color>
+    <color name="card_background">#1E293B</color>
+    <color name="card_background_elevated">#334155</color>
+
+    <color name="exam_bg">#000000</color>
+    <color name="exam_card">#121212</color>
+    <color name="exam_text_primary">#FFFFFF</color>
+    <color name="exam_text_secondary">#9CA3AF</color>
+    <color name="exam_border">#333333</color>
+    <color name="exam_input_bg">#1A1A1A</color>
+</resources>

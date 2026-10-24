@@ -11,6 +11,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -50,6 +51,9 @@ public class ExamModeActivity extends AppCompatActivity {
     private TextView tvActiveExamGoal;
     private Button btnCancelActiveExam;
 
+    private com.google.android.material.materialswitch.MaterialSwitch switchAllowCalls;
+    private com.google.android.material.materialswitch.MaterialSwitch switchAllowMessages;
+
     private AppDatabase db;
     private ExecutorService executorService;
 
@@ -76,6 +80,24 @@ public class ExamModeActivity extends AppCompatActivity {
         tvActiveExamName = findViewById(R.id.tvActiveExamName);
         tvActiveExamGoal = findViewById(R.id.tvActiveExamGoal);
         btnCancelActiveExam = findViewById(R.id.btnCancelActiveExam);
+        switchAllowCalls = findViewById(R.id.switchAllowCalls);
+        switchAllowMessages = findViewById(R.id.switchAllowMessages);
+
+        // Load SharedPreferences for switches
+        android.content.SharedPreferences prefs = getSharedPreferences("SelfPilotPrefs", MODE_PRIVATE);
+        switchAllowCalls.setChecked(prefs.getBoolean("exam_allow_calls", true));
+        switchAllowMessages.setChecked(prefs.getBoolean("exam_allow_messages", false));
+
+        switchAllowCalls.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("exam_allow_calls", isChecked).apply();
+        });
+
+        switchAllowMessages.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean("exam_allow_messages", isChecked).apply();
+        });
+
+        ImageView btnBack = findViewById(R.id.btnBack);
+        btnBack.setOnClickListener(v -> finish());
 
         db = AppDatabase.getDatabase(getApplicationContext());
         executorService = Executors.newSingleThreadExecutor();
