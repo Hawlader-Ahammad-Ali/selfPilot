@@ -39,12 +39,16 @@ public class ExamModeActivity extends AppCompatActivity {
 
     private EditText etExamName;
     private EditText etExamDailyGoal;
-    private Button btnPickStartDate;
-    private Button btnPickEndDate;
-    private Button btnSaveExam;
+    private View btnPickStartDate;
+    private View btnPickEndDate;
+    private View btnSaveExam;
 
-    private Button btnSelectRestrictedApps;
-    private Button btnSelectAllowedApps;
+    private View btnSelectRestrictedApps;
+    private View btnSelectAllowedApps;
+    private TextView tvStartDateText;
+    private TextView tvEndDateText;
+    private TextView tvRestrictedCount;
+    private TextView tvAllowedCount;
 
     private MaterialCardView cardActiveExam;
     private TextView tvActiveExamName;
@@ -75,6 +79,10 @@ public class ExamModeActivity extends AppCompatActivity {
         btnSaveExam = findViewById(R.id.btnSaveExam);
         btnSelectRestrictedApps = findViewById(R.id.btnSelectRestrictedApps);
         btnSelectAllowedApps = findViewById(R.id.btnSelectAllowedApps);
+        tvStartDateText = findViewById(R.id.tvStartDateText);
+        tvEndDateText = findViewById(R.id.tvEndDateText);
+        tvRestrictedCount = findViewById(R.id.tvRestrictedCount);
+        tvAllowedCount = findViewById(R.id.tvAllowedCount);
 
         cardActiveExam = findViewById(R.id.cardActiveExam);
         tvActiveExamName = findViewById(R.id.tvActiveExamName);
@@ -110,12 +118,12 @@ public class ExamModeActivity extends AppCompatActivity {
         
         btnSelectRestrictedApps.setOnClickListener(v -> showAppSelectionDialog("Select Apps to Restrict", selectedRestrictedPackages, newSelected -> {
             selectedRestrictedPackages = newSelected;
-            btnSelectRestrictedApps.setText("Select Apps to Restrict (" + newSelected.size() + " selected)");
+            if (tvRestrictedCount != null) tvRestrictedCount.setText(newSelected.size() + " selected");
         }));
 
         btnSelectAllowedApps.setOnClickListener(v -> showAppSelectionDialog("Select Apps to Allow", selectedAllowedPackages, newSelected -> {
             selectedAllowedPackages = newSelected;
-            btnSelectAllowedApps.setText("Select Apps to Allow (" + newSelected.size() + " selected)");
+            if (tvAllowedCount != null) tvAllowedCount.setText(newSelected.size() + " selected");
         }));
 
         btnCancelActiveExam.setOnClickListener(v -> executorService.execute(() -> {
@@ -134,10 +142,10 @@ public class ExamModeActivity extends AppCompatActivity {
             selected.set(year, month, dayOfMonth, 0, 0, 0);
             if (isStart) {
                 selectedStartDate = selected.getTimeInMillis();
-                btnPickStartDate.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
+                if (tvStartDateText != null) tvStartDateText.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
             } else {
                 selectedEndDate = selected.getTimeInMillis();
-                btnPickEndDate.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
+                if (tvEndDateText != null) tvEndDateText.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
             }
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show();
     }
@@ -160,11 +168,11 @@ public class ExamModeActivity extends AppCompatActivity {
 
                     if (finalActive.restrictedAppsCsv != null && !finalActive.restrictedAppsCsv.isEmpty()) {
                         selectedRestrictedPackages = new ArrayList<>(Arrays.asList(finalActive.restrictedAppsCsv.split(",")));
-                        btnSelectRestrictedApps.setText("Select Apps to Restrict (" + selectedRestrictedPackages.size() + " selected)");
+                        if (tvRestrictedCount != null) tvRestrictedCount.setText(selectedRestrictedPackages.size() + " selected");
                     }
                     if (finalActive.allowedAppsCsv != null && !finalActive.allowedAppsCsv.isEmpty()) {
                         selectedAllowedPackages = new ArrayList<>(Arrays.asList(finalActive.allowedAppsCsv.split(",")));
-                        btnSelectAllowedApps.setText("Select Apps to Allow (" + selectedAllowedPackages.size() + " selected)");
+                        if (tvAllowedCount != null) tvAllowedCount.setText(selectedAllowedPackages.size() + " selected");
                     }
                     etExamName.setText(finalActive.examName);
                     etExamDailyGoal.setText(String.valueOf(finalActive.dailyGoalMinutes));
@@ -172,12 +180,12 @@ public class ExamModeActivity extends AppCompatActivity {
                     Calendar sCal = Calendar.getInstance();
                     sCal.setTimeInMillis(finalActive.startDate);
                     selectedStartDate = finalActive.startDate;
-                    btnPickStartDate.setText(sCal.get(Calendar.YEAR) + "-" + (sCal.get(Calendar.MONTH) + 1) + "-" + sCal.get(Calendar.DAY_OF_MONTH));
+                    if (tvStartDateText != null) tvStartDateText.setText(sCal.get(Calendar.YEAR) + "-" + (sCal.get(Calendar.MONTH) + 1) + "-" + sCal.get(Calendar.DAY_OF_MONTH));
 
                     Calendar eCal = Calendar.getInstance();
                     eCal.setTimeInMillis(finalActive.endDate);
                     selectedEndDate = finalActive.endDate;
-                    btnPickEndDate.setText(eCal.get(Calendar.YEAR) + "-" + (eCal.get(Calendar.MONTH) + 1) + "-" + eCal.get(Calendar.DAY_OF_MONTH));
+                    if (tvEndDateText != null) tvEndDateText.setText(eCal.get(Calendar.YEAR) + "-" + (eCal.get(Calendar.MONTH) + 1) + "-" + eCal.get(Calendar.DAY_OF_MONTH));
                 } else {
                     cardActiveExam.setVisibility(View.GONE);
                 }
