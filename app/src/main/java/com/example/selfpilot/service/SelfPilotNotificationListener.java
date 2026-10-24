@@ -32,8 +32,19 @@ public class SelfPilotNotificationListener extends NotificationListenerService {
                 // if the user has granted the Notification Listener permission.
                 cancelNotification(sbn.getKey());
             } else if (isRestrictedBySystem) {
-                RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
-                if (rule != null && rule.suppressNotifications) {
+                boolean shouldCancel = false;
+                if (db.focusSessionDao().getActiveSession() != null) {
+                    shouldCancel = true;
+                } else if (db.examProfileDao().getActiveExams() != null && !db.examProfileDao().getActiveExams().isEmpty()) {
+                    shouldCancel = true;
+                } else {
+                    RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
+                    if (rule != null && rule.suppressNotifications) {
+                        shouldCancel = true;
+                    }
+                }
+                
+                if (shouldCancel) {
                     cancelNotification(sbn.getKey());
                 }
             }

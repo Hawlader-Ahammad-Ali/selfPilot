@@ -72,8 +72,10 @@ public class FocusTimerService extends Service {
                 activeSessionId = existing.id;
                 timeLeftInMillis = existing.endTime - System.currentTimeMillis();
                 if (timeLeftInMillis > 0) {
-                    startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
-                    startTimer();
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
+                        startTimer();
+                    });
                 } else {
                     finishSession();
                 }
@@ -85,8 +87,10 @@ public class FocusTimerService extends Service {
                 activeSessionId = (int) db.focusSessionDao().insert(session);
                 timeLeftInMillis = endTime - now;
                 
-                startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
-                startTimer();
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
+                    startTimer();
+                });
             }
         }).start();
     }
@@ -101,8 +105,10 @@ public class FocusTimerService extends Service {
                 timeLeftInMillis = existing.endTime - System.currentTimeMillis();
                 
                 if (timeLeftInMillis > 0) {
-                    startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
-                    startTimer();
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        startForeground(NOTIFICATION_ID, buildNotification("Focus Session Active. Stay Focused!"));
+                        startTimer();
+                    });
                 } else {
                     finishSession();
                 }
@@ -165,6 +171,7 @@ public class FocusTimerService extends Service {
 
     private void sendTickBroadcast(long millis) {
         Intent intent = new Intent(ACTION_TIMER_TICK);
+        intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_TIME_LEFT, millis);
         intent.putExtra(EXTRA_IS_RUNNING, isRunning);
         sendBroadcast(intent);
@@ -172,6 +179,7 @@ public class FocusTimerService extends Service {
 
     private void sendFinishedBroadcast(int xpEarned) {
         Intent intent = new Intent(ACTION_TIMER_FINISHED);
+        intent.setPackage(getPackageName());
         intent.putExtra(EXTRA_XP_EARNED, xpEarned);
         sendBroadcast(intent);
     }

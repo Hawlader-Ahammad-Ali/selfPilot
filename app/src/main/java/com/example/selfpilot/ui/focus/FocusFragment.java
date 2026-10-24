@@ -42,10 +42,10 @@ public class FocusFragment extends Fragment {
     private RadioButton rb60Min;
     private RadioButton rb120Min;
     private RadioButton rbCustomMin;
-    private LinearLayout layoutCustomInput;
+    private View layoutCustomInput;
     private EditText etCustomMinutes;
 
-    private Button btnStart;
+    private View btnStart;
 
     private TextView tvFocusSessionsCompleted;
     private TextView tvFocusXpEarned;
