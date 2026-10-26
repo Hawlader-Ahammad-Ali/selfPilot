@@ -39,7 +39,17 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import android.graphics.drawable.Drawable;
+
 public class AnalyticsFragment extends Fragment {
+
+    public static class AppUsageData {
+        public String packageName;
+        public String appName;
+        public Drawable icon;
+        public long timeInMinutes;
+        public float percentage;
+    }
 
     private ChipGroup chipGroupAnalyticsDate;
     private TextView tvDateRangeInfo;
@@ -96,7 +106,28 @@ public class AnalyticsFragment extends Fragment {
         appUsagePieChart.getDescription().setEnabled(false);
         appUsagePieChart.setDrawHoleEnabled(true);
         appUsagePieChart.setHoleColor(Color.TRANSPARENT);
-        appUsagePieChart.getLegend().setTextColor(Color.WHITE);
+        
+        // Custom UI modifications
+        appUsagePieChart.getLegend().setEnabled(false);
+        appUsagePieChart.setDrawEntryLabels(false);
+        appUsagePieChart.setHighlightPerTapEnabled(true);
+        
+        AppUsageMarkerView mv = new AppUsageMarkerView(requireContext(), R.layout.layout_pie_marker);
+        mv.setChartView(appUsagePieChart);
+        appUsagePieChart.setMarker(mv);
+    }
+
+    private int getColorForPackage(String packageName) {
+        if ("Others".equals(packageName) || "No Data".equals(packageName)) {
+            return Color.parseColor("#9CA3AF");
+        }
+        int hash = packageName.hashCode();
+        String[] palette = {
+            "#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444",
+            "#06B6D4", "#F43F5E", "#84CC16", "#D946EF", "#14B8A6",
+            "#F97316", "#6366F1", "#EC4899", "#EAB308"
+        };
+        return Color.parseColor(palette[Math.abs(hash) % palette.length]);
     }
 
     private void setupListeners() {
@@ -142,8 +173,14 @@ public class AnalyticsFragment extends Fragment {
                 Map<String, UsageStats> stats = UsageUtil.getUsageStats(safeContext, startMillis, now);
                 long totalScreenMillis = 0;
                 List<PieEntry> pieEntries = new ArrayList<>();
+                List<Integer> colors = new ArrayList<>();
                 
                 if (stats != null) {
+                    long totalMillisForPie = 0;
+                    for (UsageStats s : stats.values()) {
+                        totalMillisForPie += s.getTotalTimeInForeground();
+                    }
+
                     // Group by top apps
                     List<Map.Entry<String, UsageStats>> sortedStats = new ArrayList<>(stats.entrySet());
                     sortedStats.sort((e1, e2) -> Long.compare(e2.getValue().getTotalTimeInForeground(), e1.getValue().getTotalTimeInForeground()));
@@ -154,12 +191,24 @@ public class AnalyticsFragment extends Fragment {
                         long time = stat.getTotalTimeInForeground();
                         if (time > 0) {
                             totalScreenMillis += time;
-                            String appName = sortedStats.get(i).getKey();
+                            String pkg = sortedStats.get(i).getKey();
+                            String appName = pkg;
+                            Drawable icon = null;
                             try {
-                                ApplicationInfo ai = packageManager.getApplicationInfo(appName, 0);
+                                ApplicationInfo ai = packageManager.getApplicationInfo(pkg, 0);
                                 appName = packageManager.getApplicationLabel(ai).toString();
+                                icon = packageManager.getApplicationIcon(ai);
                             } catch (Exception ignored) {}
-                            pieEntries.add(new PieEntry((float) (time / 60000), appName));
+                            
+                            AppUsageData data = new AppUsageData();
+                            data.packageName = pkg;
+                            data.appName = appName;
+                            data.icon = icon;
+                            data.timeInMinutes = time / 60000;
+                            data.percentage = totalMillisForPie > 0 ? ((float) time / totalMillisForPie) * 100f : 0f;
+
+                            pieEntries.add(new PieEntry((float) (time / 60000), appName, data));
+                            colors.add(getColorForPackage(pkg));
                         }
                     }
                     // Add "Others"
@@ -169,12 +218,27 @@ public class AnalyticsFragment extends Fragment {
                     }
                     totalScreenMillis += otherMillis;
                     if (otherMillis > 0) {
-                        pieEntries.add(new PieEntry((float) (otherMillis / 60000), "Others"));
+                        AppUsageData data = new AppUsageData();
+                        data.packageName = "Others";
+                        data.appName = "Others";
+                        data.icon = null;
+                        data.timeInMinutes = otherMillis / 60000;
+                        data.percentage = totalMillisForPie > 0 ? ((float) otherMillis / totalMillisForPie) * 100f : 0f;
+
+                        pieEntries.add(new PieEntry((float) (otherMillis / 60000), "Others", data));
+                        colors.add(getColorForPackage("Others"));
                     }
                 }
 
                 if (pieEntries.isEmpty()) {
-                    pieEntries.add(new PieEntry(1f, "No Data"));
+                    AppUsageData data = new AppUsageData();
+                    data.packageName = "No Data";
+                    data.appName = "No Data";
+                    data.icon = null;
+                    data.timeInMinutes = 0;
+                    data.percentage = 0f;
+                    pieEntries.add(new PieEntry(1f, "No Data", data));
+                    colors.add(getColorForPackage("No Data"));
                 }
 
                 // Prepare Data Models
@@ -191,8 +255,9 @@ public class AnalyticsFragment extends Fragment {
                 BarData barData = new BarData(barDataSet);
 
                 PieDataSet pieDataSet = new PieDataSet(pieEntries, "Top Apps");
-                pieDataSet.setColors(new int[]{Color.parseColor("#3B82F6"), Color.parseColor("#8B5CF6"), Color.parseColor("#10B981"), Color.parseColor("#F59E0B"), Color.parseColor("#EF4444")});
+                pieDataSet.setColors(colors);
                 pieDataSet.setValueTextColor(Color.WHITE);
+                pieDataSet.setDrawValues(false); // Hide the slice values
                 PieData pieData = new PieData(pieDataSet);
 
                 if (getActivity() != null) {
