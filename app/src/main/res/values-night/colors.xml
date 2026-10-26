@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Background Colors -->
-    <color name="background_dark">#0F172A</color>
-    <color name="card_background">#1E293B</color>
-    <color name="card_background_elevated">#334155</color>
+    <color name="background_dark">#000000</color>
+    <color name="card_background">#1C1C1E</color>
+    <color name="card_background_elevated">#2C2C2E</color>
 
     <color name="exam_bg">#000000</color>
     <color name="exam_card">#121212</color>
