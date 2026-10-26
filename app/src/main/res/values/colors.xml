@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Background Colors -->
-    <color name="background_dark">#0F172A</color> <!-- Dark Navy -->
-    <color name="card_background">#1E293B</color> <!-- Slightly lighter navy for cards -->
-    <color name="card_background_elevated">#334155</color>
+    <color name="background_dark">#F9FAFB</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="card_background_elevated">#F3F4F6</color>
+    <color name="card_border">#E5E7EB</color>
 
     <!-- Accents -->
     <color name="electric_blue">#3B82F6</color>
@@ -11,8 +12,8 @@
     <color name="purple_accent_light">#A78BFA</color>
 
     <!-- Text Colors -->
-    <color name="text_primary">#F8FAFC</color>
-    <color name="text_secondary">#94A3B8</color>
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6B7280</color>
 
     <!-- Status Colors -->
     <color name="success_green">#10B981</color>
