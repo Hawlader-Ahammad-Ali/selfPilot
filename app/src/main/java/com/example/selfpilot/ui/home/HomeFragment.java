@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+
 public class HomeFragment extends Fragment {
 
     private TextView tvTotalScreenTime;
@@ -91,8 +93,14 @@ public class HomeFragment extends Fragment {
     }
 
     private void setupShortcuts(View root) {
-        btnShortcutApps.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_apps));
-        btnShortcutFocus.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_focus));
+        BottomNavigationView bottomNav = requireActivity().findViewById(R.id.bottom_nav);
+        
+        btnShortcutApps.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_apps));
+        btnShortcutFocus.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_focus));
+        btnShortcutAnalytics.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_analytics));
+        btnShortcutSettings.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_settings));
+        btnShortcutSettingsTop.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_settings));
+        
         btnShortcutFreezer.setOnClickListener(v -> {
             Intent intent = new Intent(getContext(), FreezerMainActivity.class);
             startActivity(intent);
@@ -101,9 +109,6 @@ public class HomeFragment extends Fragment {
             Intent intent = new Intent(getContext(), ExamModeActivity.class);
             startActivity(intent);
         });
-        btnShortcutAnalytics.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_analytics));
-        btnShortcutSettings.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_settings));
-        btnShortcutSettingsTop.setOnClickListener(v -> Navigation.findNavController(v).navigate(R.id.navigation_settings));
     }
 
     @Override

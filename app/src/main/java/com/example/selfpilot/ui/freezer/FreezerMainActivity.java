@@ -1,10 +1,11 @@
 package com.example.selfpilot.ui.freezer;
 
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.fragment.app.Fragment;
 
+import com.example.selfpilot.MainActivity;
 import com.example.selfpilot.R;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -15,31 +16,23 @@ public class FreezerMainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_freezer_main);
 
-        BottomNavigationView bottomNav = findViewById(R.id.freezer_bottom_nav);
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        bottomNav.getMenu().setGroupCheckable(0, false, true);
 
         bottomNav.setOnItemSelectedListener(item -> {
-            Fragment selectedFragment = null;
-
-            int itemId = item.getItemId();
-            if (itemId == R.id.nav_freezer_dashboard) {
-                selectedFragment = new FreezerDashboardFragment();
-            } else if (itemId == R.id.nav_freezer_manage) {
-                selectedFragment = new FreezerManageAppsFragment();
-            } else if (itemId == R.id.nav_freezer_settings) {
-                selectedFragment = new FreezerSettingsFragment();
-            }
-
-            if (selectedFragment != null) {
-                getSupportFragmentManager().beginTransaction()
-                        .replace(R.id.freezer_nav_host_fragment, selectedFragment)
-                        .commit();
-            }
-            return true;
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.putExtra("NAVIGATE_TO", item.getItemId());
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            finish();
+            return false;
         });
 
         // Set default selection
         if (savedInstanceState == null) {
-            bottomNav.setSelectedItemId(R.id.nav_freezer_dashboard);
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.freezer_nav_host_fragment, new FreezerDashboardFragment())
+                    .commit();
         }
     }
 }

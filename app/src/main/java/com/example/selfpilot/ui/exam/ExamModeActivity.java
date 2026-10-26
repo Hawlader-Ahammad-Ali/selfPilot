@@ -1,7 +1,10 @@
 package com.example.selfpilot.ui.exam;
 
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import com.example.selfpilot.MainActivity;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -106,6 +109,17 @@ public class ExamModeActivity extends AppCompatActivity {
 
         ImageView btnBack = findViewById(R.id.btnBack);
         btnBack.setOnClickListener(v -> finish());
+
+        BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+        bottomNav.getMenu().setGroupCheckable(0, false, true);
+        bottomNav.setOnItemSelectedListener(item -> {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.putExtra("NAVIGATE_TO", item.getItemId());
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            finish();
+            return false;
+        });
 
         db = AppDatabase.getDatabase(getApplicationContext());
         executorService = Executors.newSingleThreadExecutor();

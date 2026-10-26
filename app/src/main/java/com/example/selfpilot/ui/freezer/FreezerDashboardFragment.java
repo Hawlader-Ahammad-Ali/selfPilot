@@ -35,6 +35,7 @@ public class FreezerDashboardFragment extends Fragment {
     private LinearLayout layoutAppPreview;
     private TextView tvPreviewEmpty;
     private Button btnManageAppsShortcut;
+    private Button btnSettingsShortcut;
 
     private ExecutorService executorService;
     private AppDatabase db;
@@ -50,14 +51,26 @@ public class FreezerDashboardFragment extends Fragment {
         layoutAppPreview = view.findViewById(R.id.layoutAppPreview);
         tvPreviewEmpty = view.findViewById(R.id.tvPreviewEmpty);
         btnManageAppsShortcut = view.findViewById(R.id.btnManageAppsShortcut);
+        btnSettingsShortcut = view.findViewById(R.id.btnSettingsShortcut);
 
         db = AppDatabase.getDatabase(requireContext());
         executorService = Executors.newSingleThreadExecutor();
 
         btnManageAppsShortcut.setOnClickListener(v -> {
             if (getActivity() instanceof FreezerMainActivity) {
-                BottomNavigationView nav = getActivity().findViewById(R.id.freezer_bottom_nav);
-                if (nav != null) nav.setSelectedItemId(R.id.nav_freezer_manage);
+                ((FreezerMainActivity) getActivity()).getSupportFragmentManager().beginTransaction()
+                        .replace(R.id.freezer_nav_host_fragment, new FreezerManageAppsFragment())
+                        .addToBackStack(null)
+                        .commit();
+            }
+        });
+        
+        btnSettingsShortcut.setOnClickListener(v -> {
+            if (getActivity() instanceof FreezerMainActivity) {
+                ((FreezerMainActivity) getActivity()).getSupportFragmentManager().beginTransaction()
+                        .replace(R.id.freezer_nav_host_fragment, new FreezerSettingsFragment())
+                        .addToBackStack(null)
+                        .commit();
             }
         });
 

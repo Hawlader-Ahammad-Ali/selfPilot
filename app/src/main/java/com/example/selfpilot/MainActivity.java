@@ -1,5 +1,6 @@
 package com.example.selfpilot;
 
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.activity.EdgeToEdge;
@@ -33,6 +34,27 @@ public class MainActivity extends AppCompatActivity {
             NavController navController = navHostFragment.getNavController();
             BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
             NavigationUI.setupWithNavController(bottomNav, navController);
+        }
+        
+        handleNavigationIntent();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleNavigationIntent();
+    }
+
+    private void handleNavigationIntent() {
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra("NAVIGATE_TO")) {
+            int navId = intent.getIntExtra("NAVIGATE_TO", R.id.navigation_home);
+            BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
+            if (bottomNav != null) {
+                bottomNav.setSelectedItemId(navId);
+            }
+            intent.removeExtra("NAVIGATE_TO"); // prevent re-triggering on rotation
         }
     }
 }

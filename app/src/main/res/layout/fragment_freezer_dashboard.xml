@@ -131,5 +131,15 @@
             android:layout_marginTop="24dp"
             android:text="Manage Apps" />
 
+        <!-- Settings Button -->
+        <Button
+            android:id="@+id/btnSettingsShortcut"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="32dp"
+            android:text="Freezer Settings &amp; Help" />
+
     </LinearLayout>
 </ScrollView>
