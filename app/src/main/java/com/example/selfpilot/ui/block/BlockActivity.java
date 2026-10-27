@@ -132,6 +132,10 @@ public class BlockActivity extends AppCompatActivity {
                     btnForceStop.setVisibility(View.GONE);
                 }
 
+                if (tvBlockedMessage.getText().toString().contains("SelfPilot")) {
+                    tvBlockedMessage.setText("This app is restricted by SelfPilot.\n\nYou can request 5 minutes of extra time. A red tint will appear during this extra session.");
+                }
+
                 if (!finalIsFrozen) {
                     btnEmergencyUnlock.setVisibility(View.VISIBLE);
                     if (todayUnlockEntity.unlocksUsed < 3) {

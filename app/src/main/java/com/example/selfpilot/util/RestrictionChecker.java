@@ -120,7 +120,7 @@ public class RestrictionChecker {
         return shouldBlock;
     }
 
-    public static boolean isEmergencyUnlocked(Context context, String packageName) {
+    public static boolean isAppEmergencyUnlocked(Context context, String packageName) {
         if (packageName == null || packageName.isEmpty()) return false;
         AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
