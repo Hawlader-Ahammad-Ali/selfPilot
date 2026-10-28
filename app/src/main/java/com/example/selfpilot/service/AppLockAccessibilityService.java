@@ -12,6 +12,8 @@ import android.view.accessibility.AccessibilityEvent;
 import com.example.selfpilot.ui.block.BlockActivity;
 import com.example.selfpilot.util.RestrictionChecker;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -21,6 +23,8 @@ public class AppLockAccessibilityService extends AccessibilityService {
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private String currentPackage = null;
     
+    private final Set<String> checkingPackages = ConcurrentHashMap.newKeySet();
+
     private WindowManager windowManager;
     private View redOverlayView;
     private boolean isOverlayAdded = false;
@@ -73,27 +77,33 @@ public class AppLockAccessibilityService extends AccessibilityService {
     }
 
     private void checkPackageAndBlockIfRestricted(String packageName) {
+        if (checkingPackages.contains(packageName)) return;
+        checkingPackages.add(packageName);
+
         executorService.execute(() -> {
-            boolean shouldBlock = RestrictionChecker.isAppRestricted(getApplicationContext(), packageName);
-            boolean isEmergencyUnlocked = false;
+            try {
+                boolean shouldBlock = RestrictionChecker.isAppRestricted(getApplicationContext(), packageName);
+                boolean isEmergencyUnlocked = false;
 
-            if (!shouldBlock) {
-                isEmergencyUnlocked = RestrictionChecker.isAppEmergencyUnlocked(getApplicationContext(), packageName);
-            }
+                if (!shouldBlock) {
+                    isEmergencyUnlocked = RestrictionChecker.isAppEmergencyUnlocked(getApplicationContext(), packageName);
+                }
 
-            if (shouldBlock) {
-                // Return to main thread to launch activity safely
-                handler.post(() -> {
-                    removeRedOverlay();
-                    Intent intent = new Intent(this, BlockActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    intent.putExtra("packageName", packageName);
-                    startActivity(intent);
-                });
-            } else if (isEmergencyUnlocked) {
-                handler.post(this::showRedOverlay);
-            } else {
-                handler.post(this::removeRedOverlay);
+                if (shouldBlock) {
+                    handler.post(() -> {
+                        removeRedOverlay();
+                        Intent intent = new Intent(this, BlockActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        intent.putExtra("packageName", packageName);
+                        startActivity(intent);
+                    });
+                } else if (isEmergencyUnlocked) {
+                    handler.post(this::showRedOverlay);
+                } else {
+                    handler.post(this::removeRedOverlay);
+                }
+            } finally {
+                checkingPackages.remove(packageName);
             }
         });
     }

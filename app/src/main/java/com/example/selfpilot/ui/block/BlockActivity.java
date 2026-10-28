@@ -64,6 +64,14 @@ public class BlockActivity extends AppCompatActivity {
         });
     }
 
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        targetPackageName = intent.getStringExtra("packageName");
+        loadStateAndDetermineMode();
+    }
+
     private void goHome() {
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);

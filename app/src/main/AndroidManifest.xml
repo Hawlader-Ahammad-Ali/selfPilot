@@ -36,6 +36,8 @@
 
         <activity
             android:name=".ui.block.BlockActivity"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
             android:exported="false" />
 
         <activity
