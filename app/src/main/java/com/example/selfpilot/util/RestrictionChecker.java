@@ -35,16 +35,20 @@ public class RestrictionChecker {
         }
 
         AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
-        RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
 
+        if (frozen != null && frozen.isFrozen) {
+            return true; // Frozen apps are unconditionally blocked
+        }
+
+        RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         long now = System.currentTimeMillis();
         if (rule != null && now < rule.unlockedUntil) {
             // Emergency unlocked - unconditionally allow
             return false;
         }
 
-        boolean shouldBlock = (rule != null && rule.isBlocked) || (frozen != null && frozen.isFrozen);
+        boolean shouldBlock = (rule != null && rule.isBlocked);
 
         // Check Exam Mode logic
         // "If any active schedule restricts an app, that app remains restricted even if another active schedule allows it."
