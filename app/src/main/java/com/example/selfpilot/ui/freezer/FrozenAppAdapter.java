@@ -15,6 +15,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
@@ -32,6 +33,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.FrozenViewHolder> {
+
+    private static final String TAG = "SELF_PILOT_FREEZER";
 
     private List<FrozenAppEntity> frozenList = new ArrayList<>();
     private final PackageManager packageManager;
@@ -94,12 +97,13 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
                 .setMessage("Are you sure you want to unfreeze " + item.appName + "? This will restore access to launch the application.")
                 .setPositiveButton("Unfreeze", (dialog, which) -> {
                     executorService.execute(() -> {
-                        
+                        Log.i(TAG, "[UNFREEZE] Unfreezing pkg=" + item.packageName + " mode=" + item.restrictionMode);
                         if ("SHIZUKU".equals(item.restrictionMode)) {
                             ShizukuUtil.unfreezeApp(item.packageName);
                         }
 
                         db.frozenAppDao().unfreezeApp(item.packageName, System.currentTimeMillis());
+                        Log.i(TAG, "[UNFREEZE] DB unfrozen pkg=" + item.packageName);
 
                         // Update AppInfo & RestrictionRule
                         AppInfoEntity info = db.appInfoDao().getAppInfo(item.packageName);

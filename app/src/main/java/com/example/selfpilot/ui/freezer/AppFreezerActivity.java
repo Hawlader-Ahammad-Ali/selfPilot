@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -34,6 +35,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class AppFreezerActivity extends AppCompatActivity {
+
+    private static final String TAG = "SELF_PILOT_FREEZER";
 
     private TextView tvFrozenAppsCountBadge;
     private EditText etSearchFreezer;
@@ -291,9 +294,11 @@ public class AppFreezerActivity extends AppCompatActivity {
                                 }
                             } else {
                                 // Standard Mode
+                                Log.i(TAG, "[FREEZE] Persisting STANDARD freeze for pkg=" + pkg);
                                 FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
                                 frozen.restrictionMode = "STANDARD";
                                 db.frozenAppDao().insert(frozen);
+                                Log.i(TAG, "[FREEZE] DB persisted STANDARD freeze for pkg=" + pkg);
 
                                 AppInfoEntity appInfo = db.appInfoDao().getAppInfo(pkg);
                                 if (appInfo == null) {

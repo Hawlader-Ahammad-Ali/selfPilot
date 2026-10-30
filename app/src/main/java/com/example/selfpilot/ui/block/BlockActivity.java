@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -21,7 +22,26 @@ import com.example.selfpilot.data.RestrictionRuleEntity;
 import java.util.Calendar;
 import java.util.List;
 
+/**
+ * Blocking screen shown when the user attempts to open a frozen/restricted app.
+ *
+ * Launch flags: FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK
+ *  - The service always launches this with CLEAR_TASK, which terminates the frozen app's
+ *    task stack. This prevents "Back" from returning to the frozen app.
+ *
+ * Manifest: launchMode="singleInstance", excludeFromRecents="true", taskAffinity=""
+ *  - singleInstance: only one instance exists. If the block screen is already showing for
+ *    app A and the service detects app B is frozen, onNewIntent is called with B's package.
+ *  - excludeFromRecents: the block screen does not appear in the Recents list.
+ *
+ * Logging: all significant state changes are logged with tag SELF_PILOT_FREEZER.
+ */
 public class BlockActivity extends AppCompatActivity {
+
+    private static final String TAG = "SELF_PILOT_FREEZER";
+
+    /** Intent extra key for the target package name. */
+    public static final String EXTRA_PACKAGE_NAME = "packageName";
 
     private String targetPackageName;
     private AppDatabase db;
@@ -35,18 +55,23 @@ public class BlockActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_block);
 
-        targetPackageName = getIntent().getStringExtra("packageName");
+        targetPackageName = getIntent().getStringExtra(EXTRA_PACKAGE_NAME);
         db = AppDatabase.getDatabase(getApplicationContext());
+
+        Log.i(TAG, "[BLOCK_SCREEN] onCreate: targetPkg=" + targetPackageName);
 
         Button btnGoHome = findViewById(R.id.btn_go_home);
         btnGoHome.setOnClickListener(v -> goHome());
 
-        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                goHome();
-            }
-        });
+        // Back press must always go Home — never return to the frozen app
+        getOnBackPressedDispatcher().addCallback(this,
+                new androidx.activity.OnBackPressedCallback(true) {
+                    @Override
+                    public void handleOnBackPressed() {
+                        Log.i(TAG, "[BLOCK_SCREEN] Back pressed → going Home");
+                        goHome();
+                    }
+                });
 
         btnEmergencyUnlock = findViewById(R.id.btn_emergency_unlock);
         btnForceStop = findViewById(R.id.btn_force_stop);
@@ -55,7 +80,7 @@ public class BlockActivity extends AppCompatActivity {
         loadStateAndDetermineMode();
 
         btnEmergencyUnlock.setOnClickListener(v -> performEmergencyUnlock());
-        
+
         btnForceStop.setOnClickListener(v -> {
             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
             intent.setData(Uri.parse("package:" + targetPackageName));
@@ -68,11 +93,31 @@ public class BlockActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        targetPackageName = intent.getStringExtra("packageName");
+        targetPackageName = intent.getStringExtra(EXTRA_PACKAGE_NAME);
+        Log.i(TAG, "[BLOCK_SCREEN] onNewIntent: targetPkg=" + targetPackageName);
         loadStateAndDetermineMode();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.i(TAG, "[BLOCK_SCREEN] onResume: targetPkg=" + targetPackageName);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.i(TAG, "[BLOCK_SCREEN] onPause: targetPkg=" + targetPackageName);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        Log.i(TAG, "[BLOCK_SCREEN] onStop: targetPkg=" + targetPackageName);
+    }
+
     private void goHome() {
+        Log.i(TAG, "[BLOCK_SCREEN] Navigating to Home launcher");
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -85,11 +130,14 @@ public class BlockActivity extends AppCompatActivity {
             boolean isFrozen = false;
             boolean isFocusMode = false;
             boolean isExamMode = false;
-            
+
             if (targetPackageName != null) {
                 FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
                 if (frozenApp != null && frozenApp.isFrozen) {
                     isFrozen = true;
+                    Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " IS frozen");
+                } else {
+                    Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " is NOT frozen in DB");
                 }
             }
 
@@ -123,6 +171,9 @@ public class BlockActivity extends AppCompatActivity {
                 db.emergencyUnlockDao().insert(todayUnlockEntity);
                 todayUnlockEntity = db.emergencyUnlockDao().getUnlockByDate(todayStart);
             }
+
+            Log.i(TAG, "[BLOCK_SCREEN] loadState result: frozen=" + finalIsFrozen
+                    + " exam=" + finalIsExamMode + " focus=" + finalIsFocusMode);
 
             runOnUiThread(() -> {
                 if (finalIsFrozen) {
@@ -160,7 +211,9 @@ public class BlockActivity extends AppCompatActivity {
 
     private void performEmergencyUnlock() {
         if (targetPackageName == null || todayUnlockEntity == null) return;
-        
+
+        Log.i(TAG, "[BLOCK_SCREEN] Emergency unlock requested for " + targetPackageName);
+
         new Thread(() -> {
             // 1. Increment daily emergency unlock
             todayUnlockEntity.unlocksUsed++;
@@ -174,10 +227,11 @@ public class BlockActivity extends AppCompatActivity {
                 db.restrictionRuleDao().insert(rule);
                 rule = db.restrictionRuleDao().getRuleByPackageName(targetPackageName);
             }
-            
+
             if (rule != null) {
                 rule.unlockedUntil = System.currentTimeMillis() + (5 * 60 * 1000); // 5 minutes
                 db.restrictionRuleDao().update(rule);
+                Log.i(TAG, "[BLOCK_SCREEN] Emergency unlock set: unlockedUntil=" + rule.unlockedUntil);
             }
 
             // 3. If Focus Mode is active, deduct XP
@@ -195,7 +249,7 @@ public class BlockActivity extends AppCompatActivity {
                     db.examProfileDao().update(exam);
                 }
             }
-            
+
             runOnUiThread(this::goHome);
         }).start();
     }

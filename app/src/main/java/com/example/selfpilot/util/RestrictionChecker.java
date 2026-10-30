@@ -2,6 +2,7 @@ package com.example.selfpilot.util;
 
 import android.app.usage.UsageStats;
 import android.content.Context;
+import android.util.Log;
 
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
@@ -15,6 +16,23 @@ import java.util.List;
 import java.util.Map;
 
 public class RestrictionChecker {
+
+    private static final String TAG = "SELF_PILOT_FREEZER";
+
+    /**
+     * Fast check: returns true ONLY if the package is currently marked as frozen in the DB.
+     * Does NOT check Focus Mode, Exam Mode, or daily limits.
+     * Used by the service for fast DB re-verification after a snapshot match.
+     * Must be called from a background thread.
+     */
+    public static boolean isAppFrozenOnly(Context context, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return false;
+        AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
+        FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
+        boolean result = frozen != null && frozen.isFrozen;
+        Log.d(TAG, "[DB] isAppFrozenOnly(" + packageName + ") = " + result);
+        return result;
+    }
 
     /**
      * Checks if a package is currently restricted according to its freeze state, limit, schedule, Focus Mode, or Exam Mode.
@@ -38,6 +56,7 @@ public class RestrictionChecker {
         FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
 
         if (frozen != null && frozen.isFrozen) {
+            Log.i(TAG, "[DB] isAppRestricted(" + packageName + ") → FROZEN (unconditional block)");
             return true; // Frozen apps are unconditionally blocked
         }
 
@@ -45,6 +64,7 @@ public class RestrictionChecker {
         long now = System.currentTimeMillis();
         if (rule != null && now < rule.unlockedUntil) {
             // Emergency unlocked - unconditionally allow
+            Log.i(TAG, "[DB] isAppRestricted(" + packageName + ") → EMERGENCY UNLOCKED until " + rule.unlockedUntil);
             return false;
         }
 
@@ -121,6 +141,7 @@ public class RestrictionChecker {
             }
         }
 
+        Log.d(TAG, "[DB] isAppRestricted(" + packageName + ") = " + shouldBlock);
         return shouldBlock;
     }
 
