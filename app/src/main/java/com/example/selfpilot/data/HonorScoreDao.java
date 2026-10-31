@@ -22,4 +22,8 @@ public interface HonorScoreDao {
 
     @Query("SELECT * FROM honor_score ORDER BY date DESC LIMIT 30")
     List<HonorScoreEntity> getRecentScores();
+
+    /** Used by the analytics screen for the "Honor Score (Avg)" card. */
+    @Query("SELECT COALESCE(AVG(disciplineScore), 0) FROM honor_score WHERE date >= :startMillis")
+    float getAverageDisciplineScoreSince(long startMillis);
 }

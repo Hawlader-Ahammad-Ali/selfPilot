@@ -37,4 +37,8 @@ public interface ExamProfileDao {
      */
     @Query("SELECT COALESCE(SUM(xpEarned), 0) FROM exam_profiles WHERE endDate >= :startOfDay AND endDate < :endOfDay")
     int getExamXpBetween(long startOfDay, long endOfDay);
+
+    /** Exam profiles that ran inside the window (cancelled ones never count). */
+    @Query("SELECT COUNT(*) FROM exam_profiles WHERE endDate >= :startMillis AND startDate <= :endMillis AND status != 'CANCELLED'")
+    int getExamCountBetween(long startMillis, long endMillis);
 }
