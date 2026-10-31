@@ -8,7 +8,6 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.AppInfoEntity;
 import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.data.FocusSessionEntity;
-import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 
 import java.util.Calendar;
@@ -20,17 +19,13 @@ public class RestrictionChecker {
     private static final String TAG = "SELF_PILOT_FREEZER";
 
     /**
-     * Fast check: returns true ONLY if the package is currently marked as frozen in the DB.
-     * Does NOT check Focus Mode, Exam Mode, or daily limits.
-     * Used by the service for fast DB re-verification after a snapshot match.
-     * Must be called from a background thread.
+     * Fast check: returns true ONLY if the package is currently marked as frozen.
+     * Evaluates against FrozenAppsManager in-memory set (0ms).
      */
     public static boolean isAppFrozenOnly(Context context, String packageName) {
         if (packageName == null || packageName.isEmpty()) return false;
-        AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
-        FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
-        boolean result = frozen != null && frozen.isFrozen;
-        Log.d(TAG, "[DB] isAppFrozenOnly(" + packageName + ") = " + result);
+        boolean result = FrozenAppsManager.isFrozen(context, packageName);
+        Log.d(TAG, "[CHECKER] isAppFrozenOnly(" + packageName + ") = " + result);
         return result;
     }
 
@@ -52,26 +47,24 @@ public class RestrictionChecker {
             return false;
         }
 
-        AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
-        FrozenAppEntity frozen = db.frozenAppDao().getFrozenApp(packageName);
-
-        if (frozen != null && frozen.isFrozen) {
-            Log.i(TAG, "[DB] isAppRestricted(" + packageName + ") → FROZEN (unconditional block)");
-            return true; // Frozen apps are unconditionally blocked
+        // 1. Frozen apps are unconditionally blocked
+        if (FrozenAppsManager.isFrozen(context, packageName)) {
+            Log.i(TAG, "[CHECKER] isAppRestricted(" + packageName + ") → FROZEN (unconditional block)");
+            return true;
         }
 
+        AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         long now = System.currentTimeMillis();
         if (rule != null && now < rule.unlockedUntil) {
             // Emergency unlocked - unconditionally allow
-            Log.i(TAG, "[DB] isAppRestricted(" + packageName + ") → EMERGENCY UNLOCKED until " + rule.unlockedUntil);
+            Log.i(TAG, "[CHECKER] isAppRestricted(" + packageName + ") → EMERGENCY UNLOCKED until " + rule.unlockedUntil);
             return false;
         }
 
         boolean shouldBlock = (rule != null && rule.isBlocked);
 
         // Check Exam Mode logic
-        // "If any active schedule restricts an app, that app remains restricted even if another active schedule allows it."
         if (!shouldBlock) {
             List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
             if (activeExams != null && !activeExams.isEmpty()) {
@@ -141,7 +134,7 @@ public class RestrictionChecker {
             }
         }
 
-        Log.d(TAG, "[DB] isAppRestricted(" + packageName + ") = " + shouldBlock);
+        Log.d(TAG, "[CHECKER] isAppRestricted(" + packageName + ") = " + shouldBlock);
         return shouldBlock;
     }
 

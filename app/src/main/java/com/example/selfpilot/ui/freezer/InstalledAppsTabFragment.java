@@ -166,30 +166,10 @@ public class InstalledAppsTabFragment extends Fragment {
                 if (useShizuku) {
                     boolean success = ShizukuUtil.freezeApp(pkg);
                     if (success) {
-                        FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
-                        frozen.restrictionMode = "SHIZUKU";
-                        db.frozenAppDao().insert(frozen);
+                        com.example.selfpilot.util.FrozenAppsManager.freezeApp(requireContext().getApplicationContext(), pkg, name, "SHIZUKU");
                     }
                 } else {
-                    FrozenAppEntity frozen = new FrozenAppEntity(pkg, name, true, now);
-                    frozen.restrictionMode = "STANDARD";
-                    db.frozenAppDao().insert(frozen);
-
-                    AppInfoEntity appInfo = db.appInfoDao().getAppInfo(pkg);
-                    if (appInfo == null) {
-                        appInfo = new AppInfoEntity(pkg, name, false);
-                    }
-                    appInfo.isFrozen = true;
-                    appInfo.isBlocked = true;
-                    db.appInfoDao().update(appInfo);
-
-                    RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(pkg);
-                    if (rule == null) {
-                        rule = new RestrictionRuleEntity();
-                        rule.packageName = pkg;
-                    }
-                    rule.isBlocked = true;
-                    db.restrictionRuleDao().insert(rule);
+                    com.example.selfpilot.util.FrozenAppsManager.freezeApp(requireContext().getApplicationContext(), pkg, name, "STANDARD");
                 }
             }
 

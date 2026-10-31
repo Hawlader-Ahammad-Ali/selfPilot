@@ -174,10 +174,9 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.AppViewH
                 db.appInfoDao().update(appInfo);
 
                 if (isFrozen) {
-                    FrozenAppEntity frozen = new FrozenAppEntity(appInfo.packageName, appInfo.appName, true, System.currentTimeMillis());
-                    db.frozenAppDao().insert(frozen);
+                    com.example.selfpilot.util.FrozenAppsManager.freezeApp(context.getApplicationContext(), appInfo.packageName, appInfo.appName, "STANDARD");
                 } else {
-                    db.frozenAppDao().unfreezeApp(appInfo.packageName, System.currentTimeMillis());
+                    com.example.selfpilot.util.FrozenAppsManager.unfreezeApp(context.getApplicationContext(), appInfo.packageName);
                 }
 
                 RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(appInfo.packageName);

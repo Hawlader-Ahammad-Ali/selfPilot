@@ -23,6 +23,7 @@ public class BootReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
         if (intent != null && (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()) ||
                 Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction()))) {
+            com.example.selfpilot.util.FrozenAppsManager.init(context);
             
             Executors.newSingleThreadExecutor().execute(() -> {
                 AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());

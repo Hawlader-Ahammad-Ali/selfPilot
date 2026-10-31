@@ -3,14 +3,16 @@ package com.example.selfpilot.service;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
-import com.example.selfpilot.data.AppDatabase;
-import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.ui.block.BlockActivity;
+import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
 import java.util.HashSet;
@@ -20,63 +22,55 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Accessibility service that detects foreground app changes and enforces the App Freezer.
+ * Accessibility service that detects foreground app changes and enforces App Freezer restrictions.
  *
- * Architecture notes (important for understanding bypass vectors):
- *  - We listen to TYPE_WINDOW_STATE_CHANGED *and* TYPE_WINDOWS_CHANGED so that all
- *    foreground transitions are captured, including Recent-Apps resume paths.
- *  - We maintain an in-memory snapshot of frozen package names (refreshed from DB
- *    each time a new app enters the foreground, and eagerly on service connect/disconnect).
- *  - We do NOT use a ConcurrentHashMap dedup guard that skips repeated events — every
- *    event for a frozen app must trigger a block attempt to prevent rapid-tap bypass.
- *  - We track the last package we attempted to block so we don't re-launch BlockActivity
- *    when BlockActivity itself fires events (which carries our own package name).
- *  - BlockActivity is launched with FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK
- *    to kill the frozen app's foreground task and bring our block screen to the front.
+ * Architecture enhancements to completely eliminate bypass vectors:
+ * 1. Global Zero-Latency Freeze State:
+ *    Uses FrozenAppsManager's thread-safe in-memory cache. Instant (0ms) lookup without waiting
+ *    for asynchronous database reads.
+ * 2. Robust Package Name Extraction:
+ *    Handles TYPE_WINDOWS_CHANGED where event.getPackageName() is null by falling back to
+ *    event.getSource(), getRootInActiveWindow(), and getWindows().
+ * 3. Dynamic Launcher Detection:
+ *    Queries PackageManager for CATEGORY_HOME so any OEM launcher (MIUI, OneUI, ColorOS, etc.)
+ *    is dynamically recognized as safe.
+ * 4. Rapid Tap & Burst Handling:
+ *    Brings BlockActivity to the front with FLAG_ACTIVITY_REORDER_TO_FRONT | FLAG_ACTIVITY_NO_ANIMATION.
+ *    No FLAG_ACTIVITY_CLEAR_TASK flicker. A minimal 150ms throttle merges duplicate window events
+ *    from the same launch burst while immediately catching repeated user taps.
  */
 public class AppLockAccessibilityService extends AccessibilityService {
 
     private static final String TAG = "SELF_PILOT_FREEZER";
 
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
+    private final Set<String> knownLaunchers = new HashSet<>();
 
-    /**
-     * In-memory snapshot of currently-frozen package names.
-     * Refreshed from DB on every foreground change and on service lifecycle events.
-     * Access is confined to the background executor thread; the set itself is replaced
-     * atomically via a volatile reference so the main thread can read it without locking.
-     */
-    private volatile Set<String> frozenPackages = new HashSet<>();
-
-    /**
-     * Tracks whether a BlockActivity launch is already in progress for the current
-     * foreground package, preventing duplicate launches for the same event burst.
-     * Reset to null whenever the user navigates to the Home launcher or another safe package.
-     */
-    private volatile String blockingInProgressForPackage = null;
-
-    // -------------------------------------------------------------------------
-    // Service lifecycle
-    // -------------------------------------------------------------------------
+    private String lastEnforcedPackage = null;
+    private long lastEnforcedTime = 0;
 
     @Override
     public void onServiceConnected() {
         super.onServiceConnected();
         Log.i(TAG, "[LIFECYCLE] AccessibilityService CONNECTED");
 
-        // Dynamically subscribe to both event types so Recent-App resumptions are caught.
+        // Initialize the frozen apps in-memory cache immediately
+        FrozenAppsManager.init(this);
+
+        // Dynamically discover all registered launcher / home packages
+        updateLauncherPackages();
+
+        // Subscribe to both window state and window hierarchy changes
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                     | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
+            info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                    | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+            info.notificationTimeout = 20;
             setServiceInfo(info);
-            Log.i(TAG, "[LIFECYCLE] Event subscription updated: TYPE_WINDOW_STATE_CHANGED | TYPE_WINDOWS_CHANGED");
-        } else {
-            Log.w(TAG, "[LIFECYCLE] getServiceInfo() returned null — cannot update event types at runtime");
+            Log.i(TAG, "[LIFECYCLE] Service config updated: TYPE_WINDOW_STATE_CHANGED | TYPE_WINDOWS_CHANGED");
         }
-
-        refreshFrozenPackagesAsync();
     }
 
     @Override
@@ -91,176 +85,176 @@ public class AppLockAccessibilityService extends AccessibilityService {
         bgExecutor.shutdown();
     }
 
-    // -------------------------------------------------------------------------
-    // Event handling
-    // -------------------------------------------------------------------------
-
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
 
         int eventType = event.getEventType();
-        CharSequence pkgSeq = event.getPackageName();
-        String eventPackage = pkgSeq != null ? pkgSeq.toString() : null;
-
-        // Log every relevant event for Phase 1 instrumentation
-        Log.d(TAG, "[EVENT] type=" + AccessibilityEvent.eventTypeToString(eventType)
-                + " pkg=" + eventPackage
-                + " class=" + event.getClassName());
-
-        // We only act when a foreground window appears or changes
         if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             return;
         }
 
+        String eventPackage = extractPackageName(event);
+
         if (eventPackage == null || eventPackage.isEmpty()) {
-            Log.d(TAG, "[EVENT] Skipping — null/empty package");
             return;
         }
 
-        // Skip our own package and known safe system packages immediately
-        // But first: if we're transitioning to a safe package (Home, launcher, etc.),
-        // reset the blockingInProgressForPackage so the next frozen-app launch re-blocks.
+        // Skip SelfPilot itself and known safe system packages / launchers
         if (isSafePackage(eventPackage)) {
-            if (blockingInProgressForPackage != null) {
-                Log.d(TAG, "[EVENT] Transitioning to safe package " + eventPackage
-                        + " — resetting blockingInProgress (was: " + blockingInProgressForPackage + ")");
-                blockingInProgressForPackage = null;
-            }
             return;
         }
 
-        Log.i(TAG, "[EVENT] Foreground change → pkg=" + eventPackage
-                + " frozenSnapshot=" + frozenPackages
-                + " blockingInProgress=" + blockingInProgressForPackage);
+        // Check if the foreground application is frozen (0ms in-memory check)
+        boolean isFrozen = FrozenAppsManager.isFrozen(this, eventPackage);
 
-        // Refresh the frozen-package snapshot in background for the next decision
-        // (non-blocking; we use the current snapshot for this decision)
-        refreshFrozenPackagesAsync();
+        Log.d(TAG, "[EVENT] type=" + AccessibilityEvent.eventTypeToString(eventType)
+                + " pkg=" + eventPackage + " isFrozen=" + isFrozen);
 
-        // Fast-path check using the in-memory snapshot (no DB hit on hot path)
-        if (frozenPackages.contains(eventPackage)) {
-            Log.i(TAG, "[DECISION] pkg=" + eventPackage + " IS in frozen snapshot → enforcing block");
+        if (isFrozen) {
             enforceBlock(eventPackage);
         } else {
-            Log.d(TAG, "[DECISION] pkg=" + eventPackage + " NOT in frozen snapshot → no block");
-            // Clear in-progress marker if we've navigated to a genuinely different app
-            if (!eventPackage.equals(blockingInProgressForPackage)) {
-                blockingInProgressForPackage = null;
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Enforcement
-    // -------------------------------------------------------------------------
-
-    /**
-     * Enforces the block for a frozen package.
-     *
-     * KEY DESIGN:
-     *  - blockingInProgressForPackage prevents re-launching BlockActivity if it's
-     *    already in the foreground for this exact package (avoids infinite loop when
-     *    BlockActivity fires its own TYPE_WINDOW_STATE_CHANGED event).
-     *  - It is cleared whenever the user navigates to the Home screen or any safe package,
-     *    ensuring the next launch of the frozen app is always re-blocked.
-     *  - The Activity's singleTask launch mode handles concurrent block requests for the
-     *    same package via onNewIntent.
-     */
-    private void enforceBlock(String packageName) {
-        // Only skip if BlockActivity is already the foreground activity for this exact package.
-        // This guard is reset when the user goes to Home (safe package transition above).
-        if (packageName.equals(blockingInProgressForPackage)) {
-            Log.d(TAG, "[ENFORCE] BlockActivity already visible for " + packageName + " — skipping duplicate launch");
-            return;
-        }
-
-        Log.i(TAG, "[ENFORCE] Initiating block for pkg=" + packageName);
-        blockingInProgressForPackage = packageName;
-
-        bgExecutor.execute(() -> {
-            // Re-verify from DB in case the user unfroze the app between the event and now
-            boolean confirmedFrozen = RestrictionChecker.isAppFrozenOnly(
-                    getApplicationContext(), packageName);
-
-            Log.i(TAG, "[ENFORCE][BG] DB re-verification for pkg=" + packageName
-                    + " confirmedFrozen=" + confirmedFrozen);
-
-            if (!confirmedFrozen) {
-                // The snapshot was stale — app was unfrozen between snapshot refresh and this check
-                Log.w(TAG, "[ENFORCE][BG] Stale snapshot — " + packageName + " is no longer frozen. Skipping block.");
-                mainHandler.post(() -> blockingInProgressForPackage = null);
-                return;
-            }
-
-            mainHandler.post(() -> {
-                Log.i(TAG, "[ENFORCE][MAIN] Launching BlockActivity for pkg=" + packageName);
-                try {
-                    Intent intent = new Intent(AppLockAccessibilityService.this, BlockActivity.class);
-                    // FLAG_ACTIVITY_NEW_TASK: required when starting from a non-Activity context
-                    // FLAG_ACTIVITY_CLEAR_TASK: terminates the frozen app's task stack,
-                    //   preventing the user from pressing Back to return to it
-                    // Do NOT use FLAG_ACTIVITY_CLEAR_TOP here — that only affects our own task
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    intent.putExtra(BlockActivity.EXTRA_PACKAGE_NAME, packageName);
-                    startActivity(intent);
-                    Log.i(TAG, "[ENFORCE][MAIN] BlockActivity launch succeeded for pkg=" + packageName);
-                } catch (Exception e) {
-                    Log.e(TAG, "[ENFORCE][MAIN] BlockActivity launch FAILED for pkg=" + packageName, e);
-                    blockingInProgressForPackage = null;
+            // Check non-freeze restrictions (daily limit, exam mode, focus session) on background thread
+            bgExecutor.execute(() -> {
+                boolean isRestricted = RestrictionChecker.isAppRestricted(getApplicationContext(), eventPackage);
+                if (isRestricted) {
+                    enforceBlock(eventPackage);
                 }
             });
-        });
+        }
     }
 
-    // -------------------------------------------------------------------------
-    // Frozen-package snapshot management
-    // -------------------------------------------------------------------------
-
     /**
-     * Refreshes the in-memory frozen-package snapshot from the database.
-     * Called asynchronously so it never blocks event processing.
+     * Extracts the true foreground package name from an accessibility event,
+     * handling null package names common with TYPE_WINDOWS_CHANGED.
      */
-    private void refreshFrozenPackagesAsync() {
-        bgExecutor.execute(() -> {
-            try {
-                AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
-                List<FrozenAppEntity> frozenList = db.frozenAppDao().getFrozenApps();
-                Set<String> newSnapshot = new HashSet<>();
-                if (frozenList != null) {
-                    for (FrozenAppEntity entity : frozenList) {
-                        if (entity.isFrozen) {
-                            newSnapshot.add(entity.packageName);
+    private String extractPackageName(AccessibilityEvent event) {
+        // 1. Direct package from event
+        CharSequence pkgSeq = event.getPackageName();
+        if (pkgSeq != null && pkgSeq.length() > 0) {
+            String pkg = pkgSeq.toString();
+            if (!"android".equals(pkg)) {
+                return pkg;
+            }
+        }
+
+        // 2. Fallback to event source node
+        try {
+            AccessibilityNodeInfo source = event.getSource();
+            if (source != null) {
+                CharSequence sourcePkg = source.getPackageName();
+                source.recycle();
+                if (sourcePkg != null && sourcePkg.length() > 0 && !"android".equals(sourcePkg.toString())) {
+                    return sourcePkg.toString();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Fallback to active window root node
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                CharSequence rootPkg = root.getPackageName();
+                root.recycle();
+                if (rootPkg != null && rootPkg.length() > 0 && !"android".equals(rootPkg.toString())) {
+                    return rootPkg.toString();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 4. Fallback to focused window in window list
+        try {
+            List<AccessibilityWindowInfo> windows = getWindows();
+            if (windows != null) {
+                for (AccessibilityWindowInfo window : windows) {
+                    if (window.isFocused() && window.getRoot() != null) {
+                        AccessibilityNodeInfo windowRoot = window.getRoot();
+                        CharSequence windowPkg = windowRoot.getPackageName();
+                        windowRoot.recycle();
+                        if (windowPkg != null && windowPkg.length() > 0 && !"android".equals(windowPkg.toString())) {
+                            return windowPkg.toString();
                         }
                     }
                 }
-                frozenPackages = newSnapshot; // atomic volatile write
-                Log.d(TAG, "[SNAPSHOT] Frozen packages refreshed: " + newSnapshot);
-            } catch (Exception e) {
-                Log.e(TAG, "[SNAPSHOT] Failed to refresh frozen packages from DB", e);
             }
-        });
+        } catch (Exception ignored) {}
+
+        return pkgSeq != null ? pkgSeq.toString() : null;
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
+    /**
+     * Brings BlockActivity to the foreground immediately over the target app.
+     * Uses FLAG_ACTIVITY_REORDER_TO_FRONT + FLAG_ACTIVITY_NO_ANIMATION for instantaneous,
+     * zero-flicker coverage. Throttles only micro-bursts (<150ms) to merge duplicate window events.
+     */
+    private void enforceBlock(String packageName) {
+        long now = SystemClock.uptimeMillis();
+        if (packageName.equals(lastEnforcedPackage) && (now - lastEnforcedTime < 150)) {
+            // Skip within 150ms of the same burst
+            return;
+        }
+        lastEnforcedPackage = packageName;
+        lastEnforcedTime = now;
+
+        Log.i(TAG, "[ENFORCE] Target is FROZEN/RESTRICTED → launching BlockActivity for " + packageName);
+
+        try {
+            Intent intent = new Intent(this, BlockActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            intent.putExtra(BlockActivity.EXTRA_PACKAGE_NAME, packageName);
+            startActivity(intent);
+            Log.i(TAG, "[ENFORCE] BlockActivity launch attempted successfully for " + packageName);
+        } catch (Exception e) {
+            Log.e(TAG, "[ENFORCE] Failed to launch BlockActivity for " + packageName, e);
+        }
+    }
 
     /**
-     * Returns true for packages that should never trigger a block check.
-     * This includes SelfPilot itself, Android system UI, launchers, and dialers.
+     * Queries PackageManager for all packages handling CATEGORY_HOME.
+     */
+    private void updateLauncherPackages() {
+        try {
+            PackageManager pm = getPackageManager();
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_HOME);
+
+            List<ResolveInfo> list = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            if (list != null) {
+                for (ResolveInfo info : list) {
+                    if (info.activityInfo != null && info.activityInfo.packageName != null) {
+                        knownLaunchers.add(info.activityInfo.packageName);
+                    }
+                }
+            }
+
+            List<ResolveInfo> allList = pm.queryIntentActivities(intent, 0);
+            if (allList != null) {
+                for (ResolveInfo info : allList) {
+                    if (info.activityInfo != null && info.activityInfo.packageName != null) {
+                        knownLaunchers.add(info.activityInfo.packageName);
+                    }
+                }
+            }
+            Log.d(TAG, "[LAUNCHERS] Discovered home launchers: " + knownLaunchers);
+        } catch (Exception e) {
+            Log.e(TAG, "[LAUNCHERS] Error querying home launchers", e);
+        }
+    }
+
+    /**
+     * Determines whether a package should never be blocked.
      */
     private boolean isSafePackage(String packageName) {
-        if (packageName == null) return true;
-        String own = getPackageName();
-        return packageName.equals(own)
-                || packageName.equals("android")
-                || packageName.equals("com.android.systemui")
-                || packageName.equals("com.android.inputmethod.latin")
-                || packageName.contains("launcher")
-                || packageName.contains("dialer")
-                || packageName.contains("incall")
-                || packageName.contains("settings");
+        if (packageName == null || packageName.isEmpty()) return true;
+        if (packageName.equals(getPackageName())) return true;
+        if ("android".equals(packageName) || "com.android.systemui".equals(packageName)) return true;
+        if (knownLaunchers.contains(packageName)) return true;
+        if (packageName.contains("launcher") || packageName.contains("dialer") || packageName.contains("incall")) return true;
+        if ("com.android.settings".equals(packageName) || packageName.endsWith(".settings")) return true;
+        return false;
     }
 }

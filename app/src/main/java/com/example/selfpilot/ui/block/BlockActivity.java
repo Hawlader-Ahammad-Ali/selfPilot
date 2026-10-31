@@ -132,13 +132,15 @@ public class BlockActivity extends AppCompatActivity {
             boolean isExamMode = false;
 
             if (targetPackageName != null) {
-                FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
-                if (frozenApp != null && frozenApp.isFrozen) {
+                if (com.example.selfpilot.util.FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
                     isFrozen = true;
-                    Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " IS frozen");
                 } else {
-                    Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " is NOT frozen in DB");
+                    FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
+                    if (frozenApp != null && frozenApp.isFrozen) {
+                        isFrozen = true;
+                    }
                 }
+                Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " isFrozen=" + isFrozen);
             }
 
             if (!isFrozen) {

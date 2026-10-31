@@ -19,6 +19,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        com.example.selfpilot.util.FrozenAppsManager.init(this);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         

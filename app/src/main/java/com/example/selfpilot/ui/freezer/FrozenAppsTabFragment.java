@@ -149,21 +149,7 @@ public class FrozenAppsTabFragment extends Fragment {
                 if ("SHIZUKU".equals(frozen.restrictionMode)) {
                     ShizukuUtil.unfreezeApp(pkg);
                 }
-
-                db.frozenAppDao().unfreezeApp(pkg, System.currentTimeMillis());
-
-                AppInfoEntity info = db.appInfoDao().getAppInfo(pkg);
-                if (info != null) {
-                    info.isFrozen = false;
-                    info.isBlocked = false;
-                    db.appInfoDao().update(info);
-                }
-
-                RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(pkg);
-                if (rule != null) {
-                    rule.isBlocked = false;
-                    db.restrictionRuleDao().update(rule);
-                }
+                com.example.selfpilot.util.FrozenAppsManager.unfreezeApp(requireContext().getApplicationContext(), pkg);
             }
 
             if (getActivity() != null) {

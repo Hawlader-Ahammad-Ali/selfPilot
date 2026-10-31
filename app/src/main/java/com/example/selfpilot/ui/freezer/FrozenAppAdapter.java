@@ -101,23 +101,7 @@ public class FrozenAppAdapter extends RecyclerView.Adapter<FrozenAppAdapter.Froz
                         if ("SHIZUKU".equals(item.restrictionMode)) {
                             ShizukuUtil.unfreezeApp(item.packageName);
                         }
-
-                        db.frozenAppDao().unfreezeApp(item.packageName, System.currentTimeMillis());
-                        Log.i(TAG, "[UNFREEZE] DB unfrozen pkg=" + item.packageName);
-
-                        // Update AppInfo & RestrictionRule
-                        AppInfoEntity info = db.appInfoDao().getAppInfo(item.packageName);
-                        if (info != null) {
-                            info.isFrozen = false;
-                            info.isBlocked = false;
-                            db.appInfoDao().update(info);
-                        }
-
-                        RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(item.packageName);
-                        if (rule != null) {
-                            rule.isBlocked = false;
-                            db.restrictionRuleDao().update(rule);
-                        }
+                        com.example.selfpilot.util.FrozenAppsManager.unfreezeApp(context.getApplicationContext(), item.packageName);
 
                         if (onListUpdatedCallback != null) {
                             onListUpdatedCallback.run();
