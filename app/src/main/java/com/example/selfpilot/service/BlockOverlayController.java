@@ -8,6 +8,8 @@ import android.content.pm.PackageManager;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -21,17 +23,20 @@ import android.widget.TextView;
 /**
  * Full screen block surface drawn as an accessibility overlay.
  *
+ * Used for every kind of block: frozen apps, daily limit reached, Focus Mode, Exam Mode,
+ * schedules and manual rules.
+ *
  * Why an overlay instead of an activity:
- *  - Starting an activity from the background can be refused by the OS
- *    (background activity launch restrictions), which silently let frozen apps through.
+ *  - Starting an activity from the background can be refused by the OS (background activity
+ *    launch restrictions), which silently let blocked apps through.
  *  - An accessibility overlay needs no extra permission, is added synchronously (no launch
- *    latency, no race with the frozen activity finishing its resume) and always sits above
- *    every application window, so a frozen app can never be seen or touched.
+ *    latency, no race with the blocked activity finishing its resume) and always sits above
+ *    every application window, so the blocked app can never be seen or touched.
  *
  * The overlay is focusable on purpose: it swallows touches and the back key. Home still
  * works, so the user is never trapped.
  */
-public class FreezerOverlayController {
+public class BlockOverlayController {
 
     private static final String TAG = "SELF_PILOT_FREEZER";
 
@@ -40,15 +45,42 @@ public class FreezerOverlayController {
     private static final int COLOR_ACCENT = 0xFFB39DDB;
     private static final int COLOR_TEXT = 0xFFF3F0FA;
     private static final int COLOR_MUTED = 0xFF9A94AD;
-    private static final int COLOR_BUTTON = 0xFF6C4FD8;
+    private static final int COLOR_PRIMARY = 0xFF6C4FD8;
 
     private final AccessibilityService service;
     private final WindowManager windowManager;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private View overlayView;
-    private String targetPackage;
+    private String currentKey;
 
-    public FreezerOverlayController(AccessibilityService service) {
+    /** Immutable description of what to show. */
+    public static class BlockSpec {
+        public final String packageName;
+        public final String badge;
+        public final String title;
+        public final String message;
+        public final boolean allowEmergencyUnlock;
+        public final int unlocksLeft;
+        public final Runnable onEmergencyUnlock;
+
+        public BlockSpec(String packageName, String badge, String title, String message,
+                         boolean allowEmergencyUnlock, int unlocksLeft, Runnable onEmergencyUnlock) {
+            this.packageName = packageName;
+            this.badge = badge;
+            this.title = title;
+            this.message = message;
+            this.allowEmergencyUnlock = allowEmergencyUnlock;
+            this.unlocksLeft = unlocksLeft;
+            this.onEmergencyUnlock = onEmergencyUnlock;
+        }
+
+        String key() {
+            return packageName + "|" + badge + "|" + message + "|" + allowEmergencyUnlock + "|" + unlocksLeft;
+        }
+    }
+
+    public BlockOverlayController(AccessibilityService service) {
         this.service = service;
         this.windowManager = (WindowManager) service.getSystemService(Context.WINDOW_SERVICE);
     }
@@ -58,38 +90,65 @@ public class FreezerOverlayController {
     }
 
     public String getTargetPackage() {
-        return targetPackage;
+        if (overlayView == null) return null;
+        String key = currentKey;
+        if (key == null) return null;
+        int separator = key.indexOf('|');
+        return separator > 0 ? key.substring(0, separator) : key;
     }
 
     /**
-     * Shows (or keeps) the block surface for the given package.
-     * Safe to call repeatedly: no-op while the same package is already covered.
+     * Shows (or refreshes) the block surface. Safe to call on every watchdog tick:
+     * the view is only rebuilt when the described content actually changed.
      */
-    public void show(String packageName) {
-        if (packageName == null || packageName.isEmpty()) return;
+    public void show(final BlockSpec spec) {
+        if (spec == null || spec.packageName == null || spec.packageName.isEmpty()) return;
         if (windowManager == null) return;
-        if (overlayView != null && packageName.equals(targetPackage)) return;
-        if (overlayView != null) hide();
+
+        Runnable apply = () -> applySpec(spec);
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            apply.run();
+        } else {
+            mainHandler.post(apply);
+        }
+    }
+
+    private void applySpec(BlockSpec spec) {
+        String key = spec.key();
+        if (overlayView != null && key.equals(currentKey)) return;
+        hide();
 
         try {
-            View view = buildView(packageName);
+            View view = buildView(spec);
             windowManager.addView(view, buildParams());
             overlayView = view;
-            targetPackage = packageName;
-            Log.i(TAG, "[OVERLAY] Block surface shown for " + packageName);
+            currentKey = key;
+            Log.i(TAG, "[OVERLAY] Block surface shown (" + spec.badge + ") for " + spec.packageName);
         } catch (Throwable t) {
-            Log.e(TAG, "[OVERLAY] Failed to show overlay for " + packageName, t);
+            Log.e(TAG, "[OVERLAY] Failed to show overlay for " + spec.packageName, t);
         }
     }
 
     public void hide() {
-        if (overlayView == null) return;
-        try {
-            windowManager.removeView(overlayView);
-        } catch (Throwable ignored) {
+        if (overlayView == null) {
+            currentKey = null;
+            return;
         }
+        View view = overlayView;
         overlayView = null;
-        targetPackage = null;
+        currentKey = null;
+
+        Runnable remove = () -> {
+            try {
+                windowManager.removeView(view);
+            } catch (Throwable ignored) {
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            remove.run();
+        } else {
+            mainHandler.post(remove);
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -106,7 +165,7 @@ public class FreezerOverlayController {
                         | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.START;
-        params.setTitle("SelfPilotFreezerBlock");
+        params.setTitle("SelfPilotBlock");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             params.layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -114,10 +173,10 @@ public class FreezerOverlayController {
         return params;
     }
 
-    private View buildView(String packageName) {
+    private View buildView(BlockSpec spec) {
         FrameLayout root = new FrameLayout(service);
         root.setBackgroundColor(COLOR_BACKGROUND);
-        // Focusable + clickable so the frozen app underneath receives no touch or key events.
+        // Focusable + clickable so the blocked app underneath receives no touch or key events.
         root.setFocusable(true);
         root.setFocusableInTouchMode(true);
         root.setClickable(true);
@@ -135,7 +194,7 @@ public class FreezerOverlayController {
         columnParams.gravity = Gravity.CENTER;
 
         TextView badge = new TextView(service);
-        badge.setText("FROZEN");
+        badge.setText(spec.badge);
         badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
         badge.setTextColor(COLOR_ACCENT);
         badge.setLetterSpacing(0.25f);
@@ -149,7 +208,7 @@ public class FreezerOverlayController {
         column.addView(badge);
 
         TextView title = new TextView(service);
-        title.setText(appLabel(packageName));
+        title.setText(spec.title);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f);
         title.setTextColor(COLOR_TEXT);
         title.setGravity(Gravity.CENTER);
@@ -157,12 +216,11 @@ public class FreezerOverlayController {
         column.addView(title);
 
         TextView message = new TextView(service);
-        message.setText("This app is frozen by SelfPilot.\nIt stays blocked until you unfreeze it - "
-                + "launcher, recents and notifications included.");
+        message.setText(spec.message);
         message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
         message.setTextColor(COLOR_MUTED);
         message.setGravity(Gravity.CENTER);
-        message.setPadding(0, dp(12), 0, dp(28));
+        message.setPadding(0, dp(12), 0, dp(24));
         column.addView(message);
 
         TextView goHome = actionButton("Go to Home screen", false);
@@ -172,7 +230,17 @@ public class FreezerOverlayController {
         });
         column.addView(goHome, buttonParams());
 
-        TextView openSelfPilot = actionButton("Open SelfPilot to unfreeze", true);
+        if (spec.allowEmergencyUnlock && spec.unlocksLeft > 0) {
+            TextView unlock = actionButton("Emergency break (" + spec.unlocksLeft + " left today)", false);
+            unlock.setOnClickListener(v -> {
+                if (spec.onEmergencyUnlock != null) {
+                    spec.onEmergencyUnlock.run();
+                }
+            });
+            column.addView(unlock, buttonParams());
+        }
+
+        TextView openSelfPilot = actionButton("Open SelfPilot", true);
         openSelfPilot.setOnClickListener(v -> {
             hide();
             openSelfPilot();
@@ -196,7 +264,7 @@ public class FreezerOverlayController {
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(dp(14));
         if (primary) {
-            background.setColor(COLOR_BUTTON);
+            background.setColor(COLOR_PRIMARY);
         } else {
             background.setColor(COLOR_SURFACE);
             background.setStroke(dp(1), 0xFF322C45);
@@ -224,7 +292,7 @@ public class FreezerOverlayController {
         }
     }
 
-    private String appLabel(String packageName) {
+    public String appLabel(String packageName) {
         try {
             PackageManager pm = service.getPackageManager();
             ApplicationInfo info = pm.getApplicationInfo(packageName, 0);

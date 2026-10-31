@@ -15,12 +15,15 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
 import com.example.selfpilot.ui.block.BlockActivity;
+import com.example.selfpilot.util.EmergencyUnlockManager;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,7 +54,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
     /** Foreground resolution interval while the screen is interactive. */
     private static final long FOREGROUND_POLL_INTERVAL_MS = 300L;
     /** Minimum delay between two expensive (DB backed) restriction checks for one package. */
-    private static final long RESTRICTION_RECHECK_MS = 1500L;
+    private static final long RESTRICTION_RECHECK_MS = 1000L;
     /** Ignore a duplicate block request for the same package fired inside this window. */
     private static final long BLOCK_COOLDOWN_MS = 700L;
     /** Delay between the block request and each reinforcement pass. */
@@ -67,7 +70,8 @@ public class AppLockAccessibilityService extends AccessibilityService {
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
     private final Set<String> knownLaunchers = Collections.synchronizedSet(new HashSet<>());
 
-    private FreezerOverlayController overlayController;
+    private BlockOverlayController overlayController;
+    private final Map<String, String> appLabelCache = new HashMap<>();
     private long lastCacheReconcileAt = 0L;
 
     private volatile boolean watchdogActive = false;
@@ -110,7 +114,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         refreshLauncherPackages();
 
         if (overlayController == null) {
-            overlayController = new FreezerOverlayController(this);
+            overlayController = new BlockOverlayController(this);
         }
 
         // Keep the always-on guardian alive whenever enforcement is available again.
@@ -229,25 +233,112 @@ public class AppLockAccessibilityService extends AccessibilityService {
      */
     private void enforceFreeze(String packageName) {
         if (!isBlockable(packageName)) return;
-
-        if (overlayController == null) {
-            overlayController = new FreezerOverlayController(this);
-        }
+        ensureOverlay();
 
         boolean alreadyCovered = overlayController.isShowing()
                 && packageName.equals(overlayController.getTargetPackage());
-
         if (!alreadyCovered) {
             Log.i(TAG, "[ENFORCE] Frozen app blocked -> " + packageName);
         }
 
-        overlayController.show(packageName);
+        overlayController.show(new BlockOverlayController.BlockSpec(
+                packageName,
+                "FROZEN",
+                labelFor(packageName),
+                "This app is frozen by SelfPilot.\nIt stays blocked until you unfreeze it - "
+                        + "launcher, recents and notifications included.",
+                false, 0, null));
 
         if (!overlayController.isShowing()) {
             // Overlay window could not be attached (rare OEM restriction) - fall back.
             Log.w(TAG, "[ENFORCE] Overlay unavailable, using activity fallback");
             enforceBlock(packageName);
         }
+    }
+
+    /**
+     * Blocks a package that breached a usage limit, Focus Mode, Exam Mode, schedule or a
+     * manual rule. Same guarantee as the freezer: the surface appears the moment the app is
+     * opened and cannot be dismissed, so "the limit is over" always means "the app is closed".
+     */
+    private void showRestrictionBlock(String packageName, RestrictionChecker.BlockDecision decision) {
+        if (!isBlockable(packageName)) return;
+        ensureOverlay();
+
+        String badge;
+        String message;
+        switch (decision.reason) {
+            case DAILY_LIMIT:
+                badge = "DAILY LIMIT";
+                message = "You have used " + decision.usedMinutes + " of " + decision.limitMinutes
+                        + " minutes today.\nThis app is closed until your limit resets tomorrow.";
+                break;
+            case FOCUS_MODE:
+                badge = "FOCUS MODE";
+                message = "Focus Mode is active.\nThis app stays closed until your focus session ends.";
+                break;
+            case EXAM_MODE:
+                badge = "EXAM MODE";
+                message = "Exam Mode is active.\nThis app stays closed until your exam period ends.";
+                break;
+            case SCHEDULE:
+                badge = "SCHEDULE";
+                message = "This app is blocked by its schedule right now.";
+                break;
+            default:
+                badge = "RESTRICTED";
+                message = "This app is restricted by SelfPilot.";
+                break;
+        }
+
+        boolean allowBreak = decision.reason != RestrictionChecker.BlockReason.FROZEN
+                && decision.emergencyUnlocksLeft > 0;
+
+        overlayController.show(new BlockOverlayController.BlockSpec(
+                packageName, badge, labelFor(packageName), message,
+                allowBreak, decision.emergencyUnlocksLeft,
+                allowBreak ? () -> requestEmergencyBreak(packageName) : null));
+
+        if (!overlayController.isShowing()) {
+            Log.w(TAG, "[ENFORCE] Overlay unavailable, using activity fallback");
+            enforceBlock(packageName);
+        }
+    }
+
+    private void ensureOverlay() {
+        if (overlayController == null) {
+            overlayController = new BlockOverlayController(this);
+        }
+    }
+
+    private String labelFor(String packageName) {
+        String cached = appLabelCache.get(packageName);
+        if (cached != null) return cached;
+        String label = overlayController != null ? overlayController.appLabel(packageName) : packageName;
+        appLabelCache.put(packageName, label);
+        return label;
+    }
+
+    /**
+     * Grants a 5 minute emergency break, then removes the block surface so the user can
+     * continue immediately instead of tapping through a stale screen.
+     */
+    private void requestEmergencyBreak(final String packageName) {
+        EmergencyUnlockManager.requestUnlock(this, packageName, (granted, remaining) -> {
+            watchdogHandler.post(() -> {
+                if (!granted) {
+                    Log.w(TAG, "[ENFORCE] Emergency break denied for " + packageName);
+                    return;
+                }
+                if (overlayController != null
+                        && packageName.equals(overlayController.getTargetPackage())) {
+                    overlayController.hide();
+                }
+                // Force a fresh evaluation on the next tick.
+                lastRestrictionCheckedPackage = null;
+                lastRestrictionCheckAt = 0L;
+            });
+        });
     }
 
     private void dismissStaleOverlay(String foreground) {
@@ -356,9 +447,20 @@ public class AppLockAccessibilityService extends AccessibilityService {
 
         bgExecutor.execute(() -> {
             try {
-                if (RestrictionChecker.isAppRestricted(getApplicationContext(), packageName)) {
-                    enforceBlock(packageName);
-                }
+                final RestrictionChecker.BlockDecision decision =
+                        RestrictionChecker.evaluate(getApplicationContext(), packageName);
+
+                watchdogHandler.post(() -> {
+                    if (decision.reason == RestrictionChecker.BlockReason.FROZEN) {
+                        enforceFreeze(packageName);
+                    } else if (decision.isBlocked()) {
+                        showRestrictionBlock(packageName, decision);
+                    } else if (overlayController != null
+                            && packageName.equals(overlayController.getTargetPackage())) {
+                        // Limit reset, session ended, break granted - release the surface.
+                        overlayController.hide();
+                    }
+                });
             } catch (Throwable t) {
                 Log.w(TAG, "[RESTRICTION] check failed for " + packageName, t);
             }
@@ -504,3 +606,6 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
     }
 }
+
+
+

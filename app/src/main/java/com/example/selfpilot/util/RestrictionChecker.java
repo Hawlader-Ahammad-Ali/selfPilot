@@ -18,6 +18,49 @@ public class RestrictionChecker {
 
     private static final String TAG = "SELF_PILOT_FREEZER";
 
+    /** Why an app is currently blocked. Drives the message shown on the block surface. */
+    public enum BlockReason {
+        NONE,
+        FROZEN,
+        DAILY_LIMIT,
+        FOCUS_MODE,
+        EXAM_MODE,
+        SCHEDULE,
+        RULE_BLOCKED
+    }
+
+    /** Result of evaluating a package, including the numbers needed for a useful message. */
+    public static class BlockDecision {
+        public final BlockReason reason;
+        public final int limitMinutes;
+        public final int usedMinutes;
+        public final int emergencyUnlocksLeft;
+
+        private BlockDecision(BlockReason reason, int limitMinutes, int usedMinutes, int unlocksLeft) {
+            this.reason = reason;
+            this.limitMinutes = limitMinutes;
+            this.usedMinutes = usedMinutes;
+            this.emergencyUnlocksLeft = unlocksLeft;
+        }
+
+        public static BlockDecision allow() {
+            return new BlockDecision(BlockReason.NONE, 0, 0, 0);
+        }
+
+        private static BlockDecision blocked(BlockReason reason, int limitMinutes, int usedMinutes,
+                                             int unlocksLeft) {
+            return new BlockDecision(reason, limitMinutes, usedMinutes, unlocksLeft);
+        }
+
+        public boolean isBlocked() {
+            return reason != BlockReason.NONE;
+        }
+
+        public boolean isFrozen() {
+            return reason == BlockReason.FROZEN;
+        }
+    }
+
     /**
      * Fast check: returns true ONLY if the package is currently marked as frozen.
      * Evaluates against FrozenAppsManager in-memory set (0ms).
@@ -30,112 +73,111 @@ public class RestrictionChecker {
     }
 
     /**
-     * Checks if a package is currently restricted according to its freeze state, limit, schedule, Focus Mode, or Exam Mode.
-     * Note: This method accesses the database and should be called from a background thread.
+     * Backwards compatible boolean form of {@link #evaluate(Context, String)}.
+     * Note: this method hits the database and must be called from a background thread.
      */
     public static boolean isAppRestricted(Context context, String packageName) {
-        if (packageName == null || packageName.isEmpty()) return false;
+        return evaluate(context, packageName).isBlocked();
+    }
 
-        // Do not block SelfPilot or critical Android system components
-        if (packageName.equals(context.getPackageName()) ||
-                packageName.equals("android") ||
-                packageName.equals("com.android.systemui") ||
-                packageName.contains("launcher") ||
-                packageName.contains("settings") ||
-                packageName.contains("dialer") ||
-                packageName.contains("incall")) {
-            return false;
+    /**
+     * Evaluates every restriction that applies to a package right now: freeze state,
+     * daily usage limit, Focus Mode, Exam Mode, schedule and manual rule.
+     * Must be called from a background thread.
+     */
+    public static BlockDecision evaluate(Context context, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return BlockDecision.allow();
+
+        // SelfPilot and critical system components are never restricted.
+        if (packageName.equals(context.getPackageName())
+                || "android".equals(packageName)
+                || "com.android.systemui".equals(packageName)
+                || packageName.contains("launcher")
+                || packageName.endsWith(".settings")
+                || packageName.contains("dialer")
+                || packageName.contains("incall")) {
+            return BlockDecision.allow();
         }
 
-        // 1. Frozen apps are unconditionally blocked
+        int unlocksLeft = EmergencyUnlockManager.getRemainingUnlocks(context);
+
+        // 1. Frozen apps are unconditionally blocked.
         if (FrozenAppsManager.isFrozen(context, packageName)) {
-            Log.i(TAG, "[CHECKER] isAppRestricted(" + packageName + ") → FROZEN (unconditional block)");
-            return true;
+            return BlockDecision.blocked(BlockReason.FROZEN, 0, 0, 0);
         }
 
         AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         long now = System.currentTimeMillis();
+
         if (rule != null && now < rule.unlockedUntil) {
-            // Emergency unlocked - unconditionally allow
-            Log.i(TAG, "[CHECKER] isAppRestricted(" + packageName + ") → EMERGENCY UNLOCKED until " + rule.unlockedUntil);
-            return false;
+            // Emergency unlock still valid.
+            return BlockDecision.allow();
         }
 
-        boolean shouldBlock = (rule != null && rule.isBlocked);
+        // 2. Manual block rule.
+        if (rule != null && rule.isBlocked) {
+            return BlockDecision.blocked(BlockReason.RULE_BLOCKED, rule.limitMinutes, 0, unlocksLeft);
+        }
 
-        // Check Exam Mode logic
-        if (!shouldBlock) {
-            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
-            if (activeExams != null && !activeExams.isEmpty()) {
-                boolean isRestrictedByAnyExam = false;
-                for (ExamProfileEntity exam : activeExams) {
-                    if (exam.restrictedAppsCsv != null && exam.restrictedAppsCsv.contains(packageName)) {
-                        isRestrictedByAnyExam = true;
-                        break;
-                    }
-                }
-                if (isRestrictedByAnyExam) {
-                    shouldBlock = true;
+        // 3. Exam Mode.
+        List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+        if (activeExams != null) {
+            for (ExamProfileEntity exam : activeExams) {
+                if (containsPackage(exam.restrictedAppsCsv, packageName)) {
+                    return BlockDecision.blocked(BlockReason.EXAM_MODE, 0, 0, unlocksLeft);
                 }
             }
         }
 
-        // Check Focus Mode active
-        if (!shouldBlock) {
-            FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
-            if (activeSession != null) {
-                AppInfoEntity appInfo = db.appInfoDao().getAppInfo(packageName);
-                // Block if it's not explicitly marked as a Study App
-                if (appInfo == null || !appInfo.isStudyApp) {
-                    shouldBlock = true;
-                }
+        // 4. Focus Mode: everything except study apps is blocked.
+        FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
+        if (activeSession != null) {
+            AppInfoEntity appInfo = db.appInfoDao().getAppInfo(packageName);
+            if (appInfo == null || !appInfo.isStudyApp) {
+                return BlockDecision.blocked(BlockReason.FOCUS_MODE, 0, 0, unlocksLeft);
             }
         }
 
-        // Check Daily Limit Exceeded
-        if (!shouldBlock && rule != null && rule.limitMinutes > 0) {
-            Calendar calendar = Calendar.getInstance();
-            calendar.set(Calendar.HOUR_OF_DAY, 0);
-            calendar.set(Calendar.MINUTE, 0);
-            calendar.set(Calendar.SECOND, 0);
-            calendar.set(Calendar.MILLISECOND, 0);
-            long startOfDay = calendar.getTimeInMillis();
-
+        // 5. Daily limit.
+        if (rule != null && rule.limitMinutes > 0) {
+            long startOfDay = getStartOfDay();
             Map<String, UsageStats> statsMap = UsageUtil.getUsageStats(context, startOfDay, now);
-            if (statsMap != null && statsMap.containsKey(packageName)) {
+            int usedMinutes = 0;
+            if (statsMap != null) {
                 UsageStats stats = statsMap.get(packageName);
                 if (stats != null) {
-                    long usedMins = stats.getTotalTimeInForeground() / 60000;
-                    if (usedMins >= rule.limitMinutes) {
-                        shouldBlock = true;
-                    }
+                    usedMinutes = (int) (stats.getTotalTimeInForeground() / 60000L);
                 }
+            }
+            if (usedMinutes >= rule.limitMinutes) {
+                Log.i(TAG, "[CHECKER] Daily limit reached for " + packageName
+                        + " (" + usedMinutes + "/" + rule.limitMinutes + " min)");
+                return BlockDecision.blocked(BlockReason.DAILY_LIMIT,
+                        rule.limitMinutes, usedMinutes, unlocksLeft);
             }
         }
 
-        // Check Scheduled Restrictions
-        if (!shouldBlock && rule != null && rule.startTimeMinutes >= 0 && rule.endTimeMinutes >= 0) {
+        // 6. Scheduled block window.
+        if (rule != null && rule.startTimeMinutes >= 0 && rule.endTimeMinutes >= 0) {
             Calendar c = Calendar.getInstance();
             int currentMins = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
             int startMins = rule.startTimeMinutes;
             int endMins = rule.endTimeMinutes;
 
+            boolean inWindow;
             if (startMins > endMins) {
-                // Overnight schedule (e.g. 21:00 to 08:00)
-                if (currentMins >= startMins || currentMins <= endMins) {
-                    shouldBlock = true;
-                }
+                // Overnight schedule (e.g. 21:00 -> 08:00).
+                inWindow = currentMins >= startMins || currentMins <= endMins;
             } else {
-                // Same day schedule (e.g. 09:00 to 17:00)
-                if (currentMins >= startMins && currentMins <= endMins) {
-                    shouldBlock = true;
-                }
+                inWindow = currentMins >= startMins && currentMins <= endMins;
+            }
+            if (inWindow) {
+                return BlockDecision.blocked(BlockReason.SCHEDULE, 0, 0, unlocksLeft);
             }
         }
 
-        Log.d(TAG, "[CHECKER] isAppRestricted(" + packageName + ") = " + shouldBlock);
-        return shouldBlock;
+        return BlockDecision.allow();
     }
 
     public static boolean isAppEmergencyUnlocked(Context context, String packageName) {
@@ -144,5 +186,26 @@ public class RestrictionChecker {
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         long now = System.currentTimeMillis();
         return rule != null && now < rule.unlockedUntil;
+    }
+
+    /**
+     * Exact membership test for a comma separated package list.
+     * A plain String.contains() would treat "com.foo" as present inside "com.foobar".
+     */
+    public static boolean containsPackage(String csv, String packageName) {
+        if (csv == null || csv.isEmpty() || packageName == null || packageName.isEmpty()) return false;
+        for (String entry : csv.split(",")) {
+            if (entry.trim().equals(packageName)) return true;
+        }
+        return false;
+    }
+
+    private static long getStartOfDay() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        return calendar.getTimeInMillis();
     }
 }
