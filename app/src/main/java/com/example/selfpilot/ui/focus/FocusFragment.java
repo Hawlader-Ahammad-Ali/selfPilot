@@ -126,14 +126,35 @@ public class FocusFragment extends Fragment {
                     filter,
                     ContextCompat.RECEIVER_NOT_EXPORTED
             );
-
-            // Query active service status
-            Intent queryIntent = new Intent(getContext(), FocusTimerService.class);
-            queryIntent.setAction(FocusTimerService.ACTION_QUERY_STATUS);
-            getActivity().startService(queryIntent);
         }
 
+        // Restore the UI from the service snapshot. Asking the service for its status used to
+        // mean starting it, which spawned a stray background service that never stopped.
+        isTimerRunning = FocusTimerService.isRunning();
+        if (isTimerRunning) {
+            updateTimerUI(FocusTimerService.getTimeLeftMs());
+        } else {
+            updateTimerUI(currentPresetMillis());
+        }
+        updateButtonsState();
+
         loadHistoryStats();
+    }
+
+    /** Duration of the currently selected preset, in milliseconds. */
+    private long currentPresetMillis() {
+        if (rb30Min.isChecked()) return 30 * 60 * 1000L;
+        if (rb60Min.isChecked()) return 60 * 60 * 1000L;
+        if (rb120Min.isChecked()) return 120 * 60 * 1000L;
+        if (rbCustomMin.isChecked()) {
+            String custom = etCustomMinutes.getText().toString().trim();
+            try {
+                int minutes = Integer.parseInt(custom);
+                if (minutes > 0) return minutes * 60 * 1000L;
+            } catch (Exception ignored) {
+            }
+        }
+        return 15 * 60 * 1000L;
     }
 
     @Override
@@ -192,7 +213,9 @@ public class FocusFragment extends Fragment {
             } catch (Exception e) {
                 durationMins = 15;
             }
+            // Clamp so an accidental huge value cannot create an endless session.
             if (durationMins <= 0) durationMins = 15;
+            if (durationMins > 720) durationMins = 720;
         }
 
         Intent intent = new Intent(getContext(), FocusTimerService.class);
@@ -209,12 +232,8 @@ public class FocusFragment extends Fragment {
     private void handleTimerFinished(int xpEarned) {
         isTimerRunning = false;
         updateButtonsState();
-        
-        int defaultDuration = 15;
-        if (rb30Min.isChecked()) defaultDuration = 30;
-        else if (rb60Min.isChecked()) defaultDuration = 60;
-        else if (rb120Min.isChecked()) defaultDuration = 120;
-        updateTimerUI(defaultDuration * 60 * 1000L);
+
+        updateTimerUI(currentPresetMillis());
 
         Toast.makeText(getContext(), "Focus Session Completed! +" + xpEarned + " XP Awarded!", Toast.LENGTH_LONG).show();
         loadHistoryStats();

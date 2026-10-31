@@ -26,6 +26,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.receiver.GuardianRestartReceiver;
 import com.example.selfpilot.util.ExamSessionManager;
+import com.example.selfpilot.util.FocusSessionManager;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.ShizukuUtil;
 
@@ -243,6 +244,10 @@ public class GuardianService extends Service {
         // Exam Mode must not depend solely on its alarms: catch up on missed start/end events.
         executor.execute(() -> ExamSessionManager.syncStateAndRescore(this));
 
+        // Same for Focus Mode: a session whose end time has passed must stop blocking apps
+        // even if its foreground service died.
+        executor.execute(() -> FocusSessionManager.syncState(this));
+
         final int frozenCount = FrozenAppsManager.getFrozenPackages().size();
         updateNotification(frozenCount, accessibilityEnabled);
 
@@ -432,4 +437,5 @@ public class GuardianService extends Service {
         }
     }
 }
+
 

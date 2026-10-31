@@ -17,6 +17,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import com.example.selfpilot.ui.block.BlockActivity;
 import com.example.selfpilot.util.EmergencyUnlockManager;
 import com.example.selfpilot.util.ExamSessionManager;
+import com.example.selfpilot.util.FocusSessionManager;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
@@ -362,12 +363,13 @@ public class AppLockAccessibilityService extends AccessibilityService {
         lastCacheReconcileAt = now;
         FrozenAppsManager.reconcile(this);
 
-        // Keep Exam Mode in step with the clock even if its alarms were missed.
+        // Keep Exam and Focus mode in step with the clock even if their alarms/service died.
         bgExecutor.execute(() -> {
             try {
                 ExamSessionManager.syncStateAndRescore(getApplicationContext());
+                FocusSessionManager.syncState(getApplicationContext());
             } catch (Throwable t) {
-                Log.w(TAG, "[EXAM] sync failed", t);
+                Log.w(TAG, "[MODE] sync failed", t);
             }
         });
     }
@@ -616,6 +618,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
     }
 }
+
 
 
 

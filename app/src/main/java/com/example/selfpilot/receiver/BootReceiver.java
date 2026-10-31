@@ -14,6 +14,7 @@ import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.service.FocusTimerService;
 import com.example.selfpilot.util.ExamScheduler;
 import com.example.selfpilot.util.ExamSessionManager;
+import com.example.selfpilot.util.FocusSessionManager;
 
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -58,10 +59,18 @@ public class BootReceiver extends BroadcastReceiver {
                 }
 
                 // 2. Recover Active Focus Timer
+                // Close sessions that expired while the device was off; otherwise an old
+                // ACTIVE row would keep Focus Mode blocking every app forever.
+                FocusSessionManager.syncState(context.getApplicationContext());
+
                 if (db.focusSessionDao().getActiveSession() != null) {
-                    Intent recoverIntent = new Intent(context, FocusTimerService.class);
-                    recoverIntent.setAction(FocusTimerService.ACTION_RECOVER);
-                    ContextCompat.startForegroundService(context, recoverIntent);
+                    try {
+                        Intent recoverIntent = new Intent(context, FocusTimerService.class);
+                        recoverIntent.setAction(FocusTimerService.ACTION_RECOVER);
+                        ContextCompat.startForegroundService(context, recoverIntent);
+                    } catch (Throwable t) {
+                        android.util.Log.w("BootReceiver", "Unable to restart focus timer", t);
+                    }
                 }
 
                 // 3. Reconcile Exam Mode with the clock before re-arming any alarm, so an
@@ -88,4 +97,5 @@ public class BootReceiver extends BroadcastReceiver {
         }
     }
 }
+
 

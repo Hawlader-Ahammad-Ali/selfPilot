@@ -120,21 +120,28 @@ public class RestrictionChecker {
             return BlockDecision.blocked(BlockReason.RULE_BLOCKED, rule.limitMinutes, 0, unlocksLeft);
         }
 
-        // 3. Exam Mode.
+        // 3. Exam Mode. Expired exams are ignored immediately, even before the state sync
+        //    has had a chance to close them, so blocking never outlives the exam period.
         List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
         if (activeExams != null) {
             for (ExamProfileEntity exam : activeExams) {
+                if (exam == null || now > exam.endDate) continue;
                 if (containsPackage(exam.restrictedAppsCsv, packageName)) {
                     return BlockDecision.blocked(BlockReason.EXAM_MODE, 0, 0, unlocksLeft);
                 }
             }
         }
 
-        // 4. Focus Mode: everything except study apps is blocked.
+        // 4. Focus Mode: everything except study apps is blocked, and only while the session
+        //    is actually still running.
         FocusSessionEntity activeSession = db.focusSessionDao().getActiveSession();
-        if (activeSession != null) {
+        if (activeSession != null && now < activeSession.endTime) {
             AppInfoEntity appInfo = db.appInfoDao().getAppInfo(packageName);
             if (appInfo == null || !appInfo.isStudyApp) {
+                if (isAlarmClockPackage(packageName)) {
+                    // Never lock the user out of dismissing an alarm.
+                    return BlockDecision.allow();
+                }
                 return BlockDecision.blocked(BlockReason.FOCUS_MODE, 0, 0, unlocksLeft);
             }
         }
@@ -186,6 +193,27 @@ public class RestrictionChecker {
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
         long now = System.currentTimeMillis();
         return rule != null && now < rule.unlockedUntil;
+    }
+
+    /**
+     * Alarm clock apps must stay reachable during Focus Mode, otherwise an alarm that fires
+     * before the session ends cannot be dismissed or snoozed.
+     */
+    private static boolean isAlarmClockPackage(String packageName) {
+        if (packageName == null) return false;
+        if (packageName.contains("deskclock") || packageName.contains("clock")) return true;
+        switch (packageName) {
+            case "com.android.deskclock":
+            case "com.google.android.deskclock":
+            case "com.sec.android.app.clockpackage":
+            case "com.miui.clock":
+            case "com.coloros.alarmclock":
+            case "com.oneplus.deskclock":
+            case "com.transsion.clock":
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**
