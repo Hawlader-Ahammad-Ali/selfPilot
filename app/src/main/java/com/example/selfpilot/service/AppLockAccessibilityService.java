@@ -60,9 +60,15 @@ public class AppLockAccessibilityService extends AccessibilityService {
     /** Launcher package list is refreshed periodically in case it changed. */
     private static final long LAUNCHER_REFRESH_MS = 5 * 60 * 1000L;
 
+    /** How often the in-memory frozen cache is reconciled against the database. */
+    private static final long CACHE_RECONCILE_INTERVAL_MS = 20_000L;
+
     private final Handler watchdogHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
     private final Set<String> knownLaunchers = Collections.synchronizedSet(new HashSet<>());
+
+    private FreezerOverlayController overlayController;
+    private long lastCacheReconcileAt = 0L;
 
     private volatile boolean watchdogActive = false;
 
@@ -103,6 +109,13 @@ public class AppLockAccessibilityService extends AccessibilityService {
         FrozenAppsManager.init(this);
         refreshLauncherPackages();
 
+        if (overlayController == null) {
+            overlayController = new FreezerOverlayController(this);
+        }
+
+        // Keep the always-on guardian alive whenever enforcement is available again.
+        GuardianService.start(this);
+
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -128,6 +141,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
     public boolean onUnbind(Intent intent) {
         watchdogActive = false;
         watchdogHandler.removeCallbacks(watchdogRunnable);
+        if (overlayController != null) overlayController.hide();
         Log.w(TAG, "[LIFECYCLE] AccessibilityService UNBOUND - watchdog stopped");
         return super.onUnbind(intent);
     }
@@ -137,6 +151,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         super.onDestroy();
         watchdogActive = false;
         watchdogHandler.removeCallbacksAndMessages(null);
+        if (overlayController != null) overlayController.hide();
         bgExecutor.shutdown();
         Log.w(TAG, "[LIFECYCLE] AccessibilityService DESTROYED");
     }
@@ -156,6 +171,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
 
         FrozenAppsManager.ensureInitialized(this);
+        reconcileCacheIfDue();
 
         // Fast path: the event itself names a frozen package.
         CharSequence pkgSeq = event.getPackageName();
@@ -164,7 +180,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
             if (!isProtectedPackage(eventPackage)
                     && FrozenAppsManager.isFrozen(this, eventPackage)) {
                 Log.d(TAG, "[EVENT] Frozen package from event: " + eventPackage);
-                enforceBlock(eventPackage);
+                enforceFreeze(eventPackage);
                 return;
             }
         }
@@ -190,16 +206,69 @@ public class AppLockAccessibilityService extends AccessibilityService {
             lastForegroundPackage = foreground;
         }
 
-        if (isProtectedPackage(foreground)) return;
-
-        // 1. Freezer: unconditional, no exceptions, must be checked first.
+        // 1. Freezer: unconditional and checked before every other rule, so no whitelist
+        //    entry can ever exempt a frozen app.
         if (FrozenAppsManager.isFrozen(this, foreground)) {
-            enforceBlock(foreground);
+            enforceFreeze(foreground);
             return;
         }
 
-        // 2. Non-freeze restrictions (focus mode / exam mode / limits / schedule).
+        // 2. The user left the blocked app: drop the block surface immediately.
+        dismissStaleOverlay(foreground);
+
+        if (isProtectedPackage(foreground)) return;
+
+        // 3. Non-freeze restrictions (focus mode / exam mode / limits / schedule).
         maybeCheckRestrictions(foreground);
+    }
+
+    /**
+     * Blocks a frozen package with the overlay surface, which cannot be bypassed by a
+     * background activity launch refusal, an activity race or a recents re-launch.
+     * Falls back to the activity screen only if the overlay could not be added.
+     */
+    private void enforceFreeze(String packageName) {
+        if (!isBlockable(packageName)) return;
+
+        if (overlayController == null) {
+            overlayController = new FreezerOverlayController(this);
+        }
+
+        boolean alreadyCovered = overlayController.isShowing()
+                && packageName.equals(overlayController.getTargetPackage());
+
+        if (!alreadyCovered) {
+            Log.i(TAG, "[ENFORCE] Frozen app blocked -> " + packageName);
+        }
+
+        overlayController.show(packageName);
+
+        if (!overlayController.isShowing()) {
+            // Overlay window could not be attached (rare OEM restriction) - fall back.
+            Log.w(TAG, "[ENFORCE] Overlay unavailable, using activity fallback");
+            enforceBlock(packageName);
+        }
+    }
+
+    private void dismissStaleOverlay(String foreground) {
+        if (overlayController == null || !overlayController.isShowing()) return;
+        String target = overlayController.getTargetPackage();
+        if (target != null && !target.equals(foreground)) {
+            Log.d(TAG, "[OVERLAY] Foreground moved to " + foreground + " -> hiding block surface");
+            overlayController.hide();
+        }
+    }
+
+    /**
+     * The in-memory frozen set is what makes blocking instant. If it ever drifts from the
+     * database (reload failure, process reuse), blocking would silently stop working until
+     * the app is opened again. This keeps both in sync without user interaction.
+     */
+    private void reconcileCacheIfDue() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastCacheReconcileAt < CACHE_RECONCILE_INTERVAL_MS) return;
+        lastCacheReconcileAt = now;
+        FrozenAppsManager.reconcile(this);
     }
 
     /**
@@ -223,6 +292,9 @@ public class AppLockAccessibilityService extends AccessibilityService {
 
                     String pkg = windowPackage(window);
                     if (pkg == null) continue;
+                    // Our own windows (block activity / overlay host) never count as the
+                    // "app the user is using"; the app underneath is what matters.
+                    if (pkg.equals(getPackageName())) continue;
 
                     if (firstApplication == null) {
                         firstApplication = pkg;
@@ -244,7 +316,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         if (focused != null) return focused;
 
         String rootPackage = activeRootPackage();
-        if (rootPackage != null) return rootPackage;
+        if (rootPackage != null && !rootPackage.equals(getPackageName())) return rootPackage;
 
         return firstApplication;
     }

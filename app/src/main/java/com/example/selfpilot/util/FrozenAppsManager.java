@@ -120,6 +120,32 @@ public class FrozenAppsManager {
     }
 
     /**
+     * Compares the in-memory cache with the database and triggers a reload when they drift.
+     *
+     * Without this, a failed or skipped reload leaves isInitialized=true with an empty set,
+     * which silently disables all blocking until the app UI is opened again.
+     */
+    public static void reconcile(Context context) {
+        if (context == null || loadInFlight) return;
+        Context appContext = context.getApplicationContext();
+
+        dbExecutor.execute(() -> {
+            try {
+                int dbCount = AppDatabase.getDatabase(appContext).frozenAppDao().getFrozenCount();
+                if (!isInitialized || dbCount == frozenPackageNames.size()) return;
+
+                Log.w(TAG, "[MANAGER] Cache drift (db=" + dbCount + ", memory="
+                        + frozenPackageNames.size() + ") -> reloading");
+                isInitialized = false;
+                lastLoadFailureAt = 0L;
+                init(appContext);
+            } catch (Exception e) {
+                Log.w(TAG, "[MANAGER] reconcile failed", e);
+            }
+        });
+    }
+
+    /**
      * Removes SelfPilot from the frozen set and from every related table.
      * Called by the guardian service so the user's own app can never be frozen,
      * no matter what ended up persisted by a previous version or an edge case.

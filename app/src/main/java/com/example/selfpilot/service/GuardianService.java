@@ -63,6 +63,18 @@ public class GuardianService extends Service {
     private static final long RESTART_ALARM_DELAY_MS = 3_000L;
     private static final int RESTART_REQUEST_CODE = 4242;
 
+    /**
+     * Repeating heartbeat. A one-shot restart alarm only exists after onDestroy()/onTaskRemoved();
+     * if the process is killed outright (OEM task cleaners, low memory) no callback ever runs,
+     * so the freezer would stay dead until the user opened the app. This alarm has no such gap.
+     */
+    private static final int HEARTBEAT_REQUEST_CODE = 4343;
+    private static final long HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000L;
+    private static final long HEARTBEAT_FIRST_DELAY_MS = 10 * 60 * 1000L;
+
+    /** Visible to the UI so the user can see whether background protection is alive. */
+    public static volatile boolean RUNNING = false;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
@@ -98,6 +110,10 @@ public class GuardianService extends Service {
         } catch (Throwable t) {
             Log.e(TAG, "[GUARDIAN] Unable to start GuardianService", t);
         }
+    }
+
+    public static boolean isRunning() {
+        return RUNNING;
     }
 
     public static void stop(Context context) {
@@ -141,6 +157,7 @@ public class GuardianService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        RUNNING = true;
         createChannels();
         Log.i(TAG, "[GUARDIAN] onCreate");
     }
@@ -151,11 +168,14 @@ public class GuardianService extends Service {
 
         if (ACTION_STOP.equals(action)) {
             ticking = false;
+            RUNNING = false;
             handler.removeCallbacksAndMessages(null);
             stopForegroundCompat();
             stopSelf();
             return START_NOT_STICKY;
         }
+
+        RUNNING = true;
 
         // Must be called promptly or the system throws for startForegroundService().
         try {
@@ -171,6 +191,7 @@ public class GuardianService extends Service {
 
         // Do the cheap critical work immediately on every start.
         FrozenAppsManager.init(getApplicationContext());
+        scheduleHeartbeat();
 
         return START_STICKY;
     }
@@ -191,6 +212,7 @@ public class GuardianService extends Service {
     public void onDestroy() {
         Log.w(TAG, "[GUARDIAN] onDestroy -> scheduling restart");
         ticking = false;
+        RUNNING = false;
         handler.removeCallbacksAndMessages(null);
         scheduleRestart();
         super.onDestroy();
@@ -300,6 +322,31 @@ public class GuardianService extends Service {
             Log.i(TAG, "[GUARDIAN] Restart alarm scheduled");
         } catch (Throwable t) {
             Log.w(TAG, "[GUARDIAN] failed to schedule restart", t);
+        }
+    }
+
+    /**
+     * Repeating, inexact alarm: survives silent process death with no lifecycle callback.
+     * Rescheduled on every service start, and again after a reboot by BootReceiver.
+     */
+    private void scheduleHeartbeat() {
+        try {
+            AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (alarmManager == null) return;
+
+            Intent intent = new Intent(this, GuardianRestartReceiver.class);
+            intent.setAction(ACTION_START);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                    this, HEARTBEAT_REQUEST_CODE, intent, pendingIntentFlags());
+
+            alarmManager.setInexactRepeating(
+                    AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + HEARTBEAT_FIRST_DELAY_MS,
+                    HEARTBEAT_INTERVAL_MS,
+                    pendingIntent);
+            Log.i(TAG, "[GUARDIAN] Heartbeat scheduled every " + (HEARTBEAT_INTERVAL_MS / 60000) + " min");
+        } catch (Throwable t) {
+            Log.w(TAG, "[GUARDIAN] failed to schedule heartbeat", t);
         }
     }
 
