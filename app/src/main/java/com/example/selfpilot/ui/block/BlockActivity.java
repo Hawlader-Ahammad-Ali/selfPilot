@@ -18,23 +18,13 @@ import com.example.selfpilot.data.ExamProfileEntity;
 import com.example.selfpilot.data.FocusSessionEntity;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.util.FrozenAppsManager;
 
 import java.util.Calendar;
 import java.util.List;
 
 /**
  * Blocking screen shown when the user attempts to open a frozen/restricted app.
- *
- * Launch flags: FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK
- *  - The service always launches this with CLEAR_TASK, which terminates the frozen app's
- *    task stack. This prevents "Back" from returning to the frozen app.
- *
- * Manifest: launchMode="singleInstance", excludeFromRecents="true", taskAffinity=""
- *  - singleInstance: only one instance exists. If the block screen is already showing for
- *    app A and the service detects app B is frozen, onNewIntent is called with B's package.
- *  - excludeFromRecents: the block screen does not appear in the Recents list.
- *
- * Logging: all significant state changes are logged with tag SELF_PILOT_FREEZER.
  */
 public class BlockActivity extends AppCompatActivity {
 
@@ -132,7 +122,7 @@ public class BlockActivity extends AppCompatActivity {
             boolean isExamMode = false;
 
             if (targetPackageName != null) {
-                if (com.example.selfpilot.util.FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
+                if (FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
                     isFrozen = true;
                 } else {
                     FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);

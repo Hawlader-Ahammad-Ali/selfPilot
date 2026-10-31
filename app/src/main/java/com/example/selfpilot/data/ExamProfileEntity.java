@@ -1,6 +1,7 @@
 package com.example.selfpilot.data;
 
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 @Entity(tableName = "exam_profiles")
@@ -24,6 +25,7 @@ public class ExamProfileEntity {
 
     public ExamProfileEntity() {}
 
+    @Ignore
     public ExamProfileEntity(String examName, long startDate, long endDate, int dailyGoalMinutes, String restrictedAppsCsv, String allowedAppsCsv) {
         this.examName = examName;
         this.startDate = startDate;

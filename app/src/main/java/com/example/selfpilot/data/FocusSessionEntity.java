@@ -1,6 +1,7 @@
 package com.example.selfpilot.data;
 
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 @Entity(tableName = "focus_sessions")
@@ -17,6 +18,7 @@ public class FocusSessionEntity {
 
     public FocusSessionEntity() {}
 
+    @Ignore
     public FocusSessionEntity(long startTime, long endTime, int durationMinutes) {
         this.startTime = startTime;
         this.endTime = endTime;

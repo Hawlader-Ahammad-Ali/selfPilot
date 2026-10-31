@@ -23,21 +23,6 @@ import java.util.concurrent.Executors;
 
 /**
  * Accessibility service that detects foreground app changes and enforces App Freezer restrictions.
- *
- * Architecture enhancements to completely eliminate bypass vectors:
- * 1. Global Zero-Latency Freeze State:
- *    Uses FrozenAppsManager's thread-safe in-memory cache. Instant (0ms) lookup without waiting
- *    for asynchronous database reads.
- * 2. Robust Package Name Extraction:
- *    Handles TYPE_WINDOWS_CHANGED where event.getPackageName() is null by falling back to
- *    event.getSource(), getRootInActiveWindow(), and getWindows().
- * 3. Dynamic Launcher Detection:
- *    Queries PackageManager for CATEGORY_HOME so any OEM launcher (MIUI, OneUI, ColorOS, etc.)
- *    is dynamically recognized as safe.
- * 4. Rapid Tap & Burst Handling:
- *    Brings BlockActivity to the front with FLAG_ACTIVITY_REORDER_TO_FRONT | FLAG_ACTIVITY_NO_ANIMATION.
- *    No FLAG_ACTIVITY_CLEAR_TASK flicker. A minimal 150ms throttle merges duplicate window events
- *    from the same launch burst while immediately catching repeated user taps.
  */
 public class AppLockAccessibilityService extends AccessibilityService {
 
@@ -144,7 +129,6 @@ public class AppLockAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo source = event.getSource();
             if (source != null) {
                 CharSequence sourcePkg = source.getPackageName();
-                source.recycle();
                 if (sourcePkg != null && sourcePkg.length() > 0 && !"android".equals(sourcePkg.toString())) {
                     return sourcePkg.toString();
                 }
@@ -156,7 +140,6 @@ public class AppLockAccessibilityService extends AccessibilityService {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root != null) {
                 CharSequence rootPkg = root.getPackageName();
-                root.recycle();
                 if (rootPkg != null && rootPkg.length() > 0 && !"android".equals(rootPkg.toString())) {
                     return rootPkg.toString();
                 }
@@ -170,10 +153,11 @@ public class AppLockAccessibilityService extends AccessibilityService {
                 for (AccessibilityWindowInfo window : windows) {
                     if (window.isFocused() && window.getRoot() != null) {
                         AccessibilityNodeInfo windowRoot = window.getRoot();
-                        CharSequence windowPkg = windowRoot.getPackageName();
-                        windowRoot.recycle();
-                        if (windowPkg != null && windowPkg.length() > 0 && !"android".equals(windowPkg.toString())) {
-                            return windowPkg.toString();
+                        if (windowRoot != null) {
+                            CharSequence windowPkg = windowRoot.getPackageName();
+                            if (windowPkg != null && windowPkg.length() > 0 && !"android".equals(windowPkg.toString())) {
+                                return windowPkg.toString();
+                            }
                         }
                     }
                 }
