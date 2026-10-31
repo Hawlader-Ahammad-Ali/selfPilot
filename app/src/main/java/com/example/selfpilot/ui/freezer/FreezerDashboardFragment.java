@@ -23,6 +23,7 @@ import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -99,7 +100,16 @@ public class FreezerDashboardFragment extends Fragment {
         }
 
         executorService.execute(() -> {
-            List<FrozenAppEntity> frozenApps = db.frozenAppDao().getFrozenApps();
+            List<FrozenAppEntity> rawApps = db.frozenAppDao().getFrozenApps();
+            String selfPkg = requireContext().getPackageName();
+            List<FrozenAppEntity> frozenApps = new ArrayList<>();
+            if (rawApps != null) {
+                for (FrozenAppEntity entity : rawApps) {
+                    if (entity.isFrozen && !entity.packageName.equals("com.example.selfpilot") && !entity.packageName.equals(selfPkg)) {
+                        frozenApps.add(entity);
+                    }
+                }
+            }
             PackageManager pm = requireContext().getPackageManager();
 
             if (getActivity() != null) {

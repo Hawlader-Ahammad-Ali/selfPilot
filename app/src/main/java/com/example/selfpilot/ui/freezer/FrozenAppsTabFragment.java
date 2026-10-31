@@ -123,7 +123,16 @@ public class FrozenAppsTabFragment extends Fragment {
         layoutEmptyFrozen.setVisibility(View.GONE);
 
         executorService.execute(() -> {
-            List<FrozenAppEntity> frozenApps = db.frozenAppDao().getFrozenApps();
+            List<FrozenAppEntity> rawApps = db.frozenAppDao().getFrozenApps();
+            String selfPkg = requireContext().getPackageName();
+            List<FrozenAppEntity> frozenApps = new ArrayList<>();
+            if (rawApps != null) {
+                for (FrozenAppEntity entity : rawApps) {
+                    if (entity.isFrozen && !entity.packageName.equals("com.example.selfpilot") && !entity.packageName.equals(selfPkg)) {
+                        frozenApps.add(entity);
+                    }
+                }
+            }
             PackageManager pm = requireContext().getPackageManager();
 
             if (getActivity() != null) {

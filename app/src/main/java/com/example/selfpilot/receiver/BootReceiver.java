@@ -30,9 +30,10 @@ public class BootReceiver extends BroadcastReceiver {
                 
                 // 1. Recover Frozen Apps Enforcement
                 List<FrozenAppEntity> frozenApps = db.frozenAppDao().getFrozenApps();
+                String selfPkg = context.getPackageName();
                 if (frozenApps != null) {
                     for (FrozenAppEntity frozen : frozenApps) {
-                        if (frozen.isFrozen) {
+                        if (frozen.isFrozen && !frozen.packageName.equals("com.example.selfpilot") && !frozen.packageName.equals(selfPkg)) {
                             RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(frozen.packageName);
                             if (rule == null) {
                                 rule = new RestrictionRuleEntity();

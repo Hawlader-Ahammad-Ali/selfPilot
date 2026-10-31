@@ -43,9 +43,16 @@ public class BlockActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_block);
 
         targetPackageName = getIntent().getStringExtra(EXTRA_PACKAGE_NAME);
+        if (targetPackageName == null || targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
+            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity invoked for SelfPilot or null target -> finishing immediately");
+            finish();
+            return;
+        }
+
+        setContentView(R.layout.activity_block);
+
         db = AppDatabase.getDatabase(getApplicationContext());
 
         Log.i(TAG, "[BLOCK_SCREEN] onCreate: targetPkg=" + targetPackageName);
@@ -85,6 +92,11 @@ public class BlockActivity extends AppCompatActivity {
         setIntent(intent);
         targetPackageName = intent.getStringExtra(EXTRA_PACKAGE_NAME);
         Log.i(TAG, "[BLOCK_SCREEN] onNewIntent: targetPkg=" + targetPackageName);
+        if (targetPackageName == null || targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
+            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity onNewIntent for SelfPilot or null target -> finishing immediately");
+            finish();
+            return;
+        }
         loadStateAndDetermineMode();
     }
 
@@ -116,22 +128,30 @@ public class BlockActivity extends AppCompatActivity {
     }
 
     private void loadStateAndDetermineMode() {
+        if (targetPackageName == null || targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
+            finish();
+            return;
+        }
+
+        // Instant synchronous check for frozen apps using FrozenAppsManager (0ms)
+        if (FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
+            Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " IS FROZEN (instant)");
+            tvBlockedMessage.setText("This application is currently FROZEN.");
+            btnForceStop.setVisibility(View.VISIBLE);
+            btnEmergencyUnlock.setVisibility(View.GONE);
+            return;
+        }
+
         new Thread(() -> {
             boolean isFrozen = false;
             boolean isFocusMode = false;
             boolean isExamMode = false;
 
-            if (targetPackageName != null) {
-                if (FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
-                    isFrozen = true;
-                } else {
-                    FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
-                    if (frozenApp != null && frozenApp.isFrozen) {
-                        isFrozen = true;
-                    }
-                }
-                Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " isFrozen=" + isFrozen);
+            FrozenAppEntity frozenApp = db.frozenAppDao().getFrozenApp(targetPackageName);
+            if (frozenApp != null && frozenApp.isFrozen) {
+                isFrozen = true;
             }
+            Log.i(TAG, "[BLOCK_SCREEN] loadState: " + targetPackageName + " isFrozen=" + isFrozen);
 
             if (!isFrozen) {
                 List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();

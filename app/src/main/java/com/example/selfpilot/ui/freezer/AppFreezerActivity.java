@@ -156,7 +156,16 @@ public class AppFreezerActivity extends AppCompatActivity {
         runOnUiThread(() -> progressLoadingFreezer.setVisibility(View.VISIBLE));
 
         executorService.execute(() -> {
-            masterFrozenList = db.frozenAppDao().getFrozenApps();
+            List<FrozenAppEntity> rawApps = db.frozenAppDao().getFrozenApps();
+            String selfPkg = getPackageName();
+            masterFrozenList = new ArrayList<>();
+            if (rawApps != null) {
+                for (FrozenAppEntity entity : rawApps) {
+                    if (entity.isFrozen && !entity.packageName.equals("com.example.selfpilot") && !entity.packageName.equals(selfPkg)) {
+                        masterFrozenList.add(entity);
+                    }
+                }
+            }
 
             runOnUiThread(() -> {
                 progressLoadingFreezer.setVisibility(View.GONE);

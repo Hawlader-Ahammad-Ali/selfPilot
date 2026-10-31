@@ -31,9 +31,6 @@ public class AppLockAccessibilityService extends AccessibilityService {
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
     private final Set<String> knownLaunchers = new HashSet<>();
 
-    private String lastEnforcedPackage = null;
-    private long lastEnforcedTime = 0;
-
     @Override
     public void onServiceConnected() {
         super.onServiceConnected();
@@ -52,7 +49,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
                     | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
             info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
                     | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
-            info.notificationTimeout = 20;
+            info.notificationTimeout = 0;
             setServiceInfo(info);
             Log.i(TAG, "[LIFECYCLE] Service config updated: TYPE_WINDOW_STATE_CHANGED | TYPE_WINDOWS_CHANGED");
         }
@@ -80,83 +77,71 @@ public class AppLockAccessibilityService extends AccessibilityService {
             return;
         }
 
-        String eventPackage = extractPackageName(event);
-
-        if (eventPackage == null || eventPackage.isEmpty()) {
-            return;
+        // 1. Direct event package check
+        CharSequence pkgSeq = event.getPackageName();
+        if (pkgSeq != null && pkgSeq.length() > 0) {
+            String directPkg = pkgSeq.toString();
+            if (isSafePackage(directPkg)) {
+                return;
+            }
+            if (FrozenAppsManager.isFrozen(this, directPkg)) {
+                Log.d(TAG, "[EVENT] Direct frozen match: " + directPkg);
+                enforceBlock(directPkg);
+                return;
+            }
         }
 
-        // Skip SelfPilot itself and known safe system packages / launchers
-        if (isSafePackage(eventPackage)) {
-            return;
+        // 2. Window hierarchy inspection (critical for TYPE_WINDOWS_CHANGED and Android 12+ StartingWindow)
+        String foregroundApp = findTopApplicationPackage();
+        if (foregroundApp != null && !isSafePackage(foregroundApp)) {
+            if (FrozenAppsManager.isFrozen(this, foregroundApp)) {
+                Log.d(TAG, "[EVENT] Top window frozen match: " + foregroundApp);
+                enforceBlock(foregroundApp);
+                return;
+            } else {
+                // Check non-freeze restrictions on background thread
+                final String pkgToCheck = foregroundApp;
+                bgExecutor.execute(() -> {
+                    if (RestrictionChecker.isAppRestricted(getApplicationContext(), pkgToCheck)) {
+                        enforceBlock(pkgToCheck);
+                    }
+                });
+                return;
+            }
         }
 
-        // Check if the foreground application is frozen (0ms in-memory check)
-        boolean isFrozen = FrozenAppsManager.isFrozen(this, eventPackage);
-
-        Log.d(TAG, "[EVENT] type=" + AccessibilityEvent.eventTypeToString(eventType)
-                + " pkg=" + eventPackage + " isFrozen=" + isFrozen);
-
-        if (isFrozen) {
-            enforceBlock(eventPackage);
-        } else {
-            // Check non-freeze restrictions (daily limit, exam mode, focus session) on background thread
-            bgExecutor.execute(() -> {
-                boolean isRestricted = RestrictionChecker.isAppRestricted(getApplicationContext(), eventPackage);
-                if (isRestricted) {
-                    enforceBlock(eventPackage);
-                }
-            });
+        // 3. Fallback check for directPkg non-freeze restrictions
+        if (pkgSeq != null && pkgSeq.length() > 0) {
+            String directPkg = pkgSeq.toString();
+            if (!"android".equals(directPkg) && !isSafePackage(directPkg)) {
+                bgExecutor.execute(() -> {
+                    if (RestrictionChecker.isAppRestricted(getApplicationContext(), directPkg)) {
+                        enforceBlock(directPkg);
+                    }
+                });
+            }
         }
     }
 
     /**
-     * Extracts the true foreground package name from an accessibility event,
-     * handling null package names common with TYPE_WINDOWS_CHANGED.
+     * Inspects the current interactive windows in top-to-bottom Z-order
+     * to identify the topmost application package.
      */
-    private String extractPackageName(AccessibilityEvent event) {
-        // 1. Direct package from event
-        CharSequence pkgSeq = event.getPackageName();
-        if (pkgSeq != null && pkgSeq.length() > 0) {
-            String pkg = pkgSeq.toString();
-            if (!"android".equals(pkg)) {
-                return pkg;
-            }
-        }
-
-        // 2. Fallback to event source node
-        try {
-            AccessibilityNodeInfo source = event.getSource();
-            if (source != null) {
-                CharSequence sourcePkg = source.getPackageName();
-                if (sourcePkg != null && sourcePkg.length() > 0 && !"android".equals(sourcePkg.toString())) {
-                    return sourcePkg.toString();
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // 3. Fallback to active window root node
-        try {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root != null) {
-                CharSequence rootPkg = root.getPackageName();
-                if (rootPkg != null && rootPkg.length() > 0 && !"android".equals(rootPkg.toString())) {
-                    return rootPkg.toString();
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // 4. Fallback to focused window in window list
+    private String findTopApplicationPackage() {
         try {
             List<AccessibilityWindowInfo> windows = getWindows();
-            if (windows != null) {
+            if (windows != null && !windows.isEmpty()) {
                 for (AccessibilityWindowInfo window : windows) {
-                    if (window.isFocused() && window.getRoot() != null) {
-                        AccessibilityNodeInfo windowRoot = window.getRoot();
-                        if (windowRoot != null) {
-                            CharSequence windowPkg = windowRoot.getPackageName();
-                            if (windowPkg != null && windowPkg.length() > 0 && !"android".equals(windowPkg.toString())) {
-                                return windowPkg.toString();
+                    if (window == null) continue;
+                    if (window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                        AccessibilityNodeInfo root = window.getRoot();
+                        if (root != null) {
+                            CharSequence rootPkg = root.getPackageName();
+                            if (rootPkg != null && rootPkg.length() > 0) {
+                                String pkg = rootPkg.toString();
+                                if (!"android".equals(pkg)) {
+                                    return pkg;
+                                }
                             }
                         }
                     }
@@ -164,34 +149,43 @@ public class AppLockAccessibilityService extends AccessibilityService {
             }
         } catch (Exception ignored) {}
 
-        return pkgSeq != null ? pkgSeq.toString() : null;
+        // Fallback to active window root node
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root != null) {
+                CharSequence rootPkg = root.getPackageName();
+                if (rootPkg != null && rootPkg.length() > 0) {
+                    String pkg = rootPkg.toString();
+                    if (!"android".equals(pkg)) {
+                        return pkg;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return null;
     }
 
     /**
-     * Brings BlockActivity to the foreground immediately over the target app.
-     * Uses FLAG_ACTIVITY_REORDER_TO_FRONT + FLAG_ACTIVITY_NO_ANIMATION for instantaneous,
-     * zero-flicker coverage. Throttles only micro-bursts (<150ms) to merge duplicate window events.
+     * Enforces blocking for the frozen or restricted package.
+     * Launches BlockActivity on top without dropping user taps.
      */
     private void enforceBlock(String packageName) {
-        long now = SystemClock.uptimeMillis();
-        if (packageName.equals(lastEnforcedPackage) && (now - lastEnforcedTime < 150)) {
-            // Skip within 150ms of the same burst
-            return;
-        }
-        lastEnforcedPackage = packageName;
-        lastEnforcedTime = now;
+        if (packageName == null || packageName.isEmpty()) return;
+        if (packageName.equals(getPackageName()) || "com.example.selfpilot".equals(packageName)) return;
+        if (isSafePackage(packageName)) return;
 
         Log.i(TAG, "[ENFORCE] Target is FROZEN/RESTRICTED → launching BlockActivity for " + packageName);
 
         try {
             Intent intent = new Intent(this, BlockActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
                     | Intent.FLAG_ACTIVITY_SINGLE_TOP
                     | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             intent.putExtra(BlockActivity.EXTRA_PACKAGE_NAME, packageName);
             startActivity(intent);
-            Log.i(TAG, "[ENFORCE] BlockActivity launch attempted successfully for " + packageName);
+            Log.i(TAG, "[ENFORCE] BlockActivity launch attempted for " + packageName);
         } catch (Exception e) {
             Log.e(TAG, "[ENFORCE] Failed to launch BlockActivity for " + packageName, e);
         }
@@ -234,7 +228,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
      */
     private boolean isSafePackage(String packageName) {
         if (packageName == null || packageName.isEmpty()) return true;
-        if (packageName.equals(getPackageName())) return true;
+        if (packageName.equals(getPackageName()) || "com.example.selfpilot".equals(packageName)) return true;
         if ("android".equals(packageName) || "com.android.systemui".equals(packageName)) return true;
         if (knownLaunchers.contains(packageName)) return true;
         if (packageName.contains("launcher") || packageName.contains("dialer") || packageName.contains("incall")) return true;

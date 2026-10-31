@@ -194,8 +194,13 @@ public class HomeFragment extends Fragment {
             }
 
             List<FrozenAppEntity> frozen = db.frozenAppDao().getFrozenApps();
+            String selfPkg = requireContext().getPackageName();
             if (frozen != null) {
-                restrictedCount += frozen.size();
+                for (FrozenAppEntity f : frozen) {
+                    if (f.isFrozen && !f.packageName.equals("com.example.selfpilot") && !f.packageName.equals(selfPkg)) {
+                        restrictedCount++;
+                    }
+                }
             }
 
             EmergencyUnlockEntity unlockEntity = db.emergencyUnlockDao().getUnlockByDate(startOfDay);
