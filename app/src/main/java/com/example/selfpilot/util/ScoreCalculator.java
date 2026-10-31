@@ -95,8 +95,16 @@ public class ScoreCalculator {
         // Fetch completed focus sessions today
         List<FocusSessionEntity> sessions = db.focusSessionDao().getCompletedSessionsToday(startOfDay);
 
+        // Exam XP must be part of the calculation itself; adding it afterwards in the alarm
+        // receiver meant the very next recalculation wiped it.
+        int examXp = 0;
+        try {
+            examXp = db.examProfileDao().getExamXpBetween(startOfDay, startOfDay + 86400000L);
+        } catch (Exception ignored) {
+        }
+
         int disciplineScore = calculateDisciplineScore(nonStudyMinutes, 240); // 4 hour budget default
-        int studyPoints = calculateStudyPoints(studyMinutes, sessions);
+        int studyPoints = calculateStudyPoints(studyMinutes, sessions) + examXp;
 
         HonorScoreEntity todayScore = honorScoreDao.getScoreByDate(startOfDay);
         int currentStreak = 1;

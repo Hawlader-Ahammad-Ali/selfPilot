@@ -140,37 +140,65 @@ public class ExamModeActivity extends AppCompatActivity {
             if (tvAllowedCount != null) tvAllowedCount.setText(newSelected.size() + " selected");
         }));
 
-        btnCancelActiveExam.setOnClickListener(v -> executorService.execute(() -> {
-            db.examProfileDao().deactivateAllExams();
-            runOnUiThread(() -> {
-                Toast.makeText(this, "Active Exam Mode Cancelled.", Toast.LENGTH_SHORT).show();
-                loadActiveExam();
-            });
-        }));
+        btnCancelActiveExam.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Cancel Exam Mode?")
+                .setMessage("This cancels the active and any scheduled exam profiles, and removes their alarms.")
+                .setPositiveButton("Cancel Exam Mode", (dialog, which) -> cancelExamMode())
+                .setNegativeButton("Keep", null)
+                .show());
     }
 
+    /**
+     * Start date is the beginning of the chosen day, end date is the END of the chosen day.
+     * Using midnight for both made every exam end one day early (an exam ending "on the 5th"
+     * actually ended at 00:00 of the 5th instead of covering that whole day).
+     */
     private void showDatePicker(boolean isStart) {
         Calendar cal = Calendar.getInstance();
+        long current = isStart ? selectedStartDate : selectedEndDate;
+        if (current > 0) {
+            cal.setTimeInMillis(current);
+        }
+
         new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
             Calendar selected = Calendar.getInstance();
-            selected.set(year, month, dayOfMonth, 0, 0, 0);
             if (isStart) {
+                selected.set(year, month, dayOfMonth, 0, 0, 0);
+                selected.set(Calendar.MILLISECOND, 0);
                 selectedStartDate = selected.getTimeInMillis();
-                if (tvStartDateText != null) tvStartDateText.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
+                if (tvStartDateText != null) {
+                    tvStartDateText.setText(formatDate(selectedStartDate) + " 00:00");
+                }
             } else {
+                selected.set(year, month, dayOfMonth, 23, 59, 59);
+                selected.set(Calendar.MILLISECOND, 999);
                 selectedEndDate = selected.getTimeInMillis();
-                if (tvEndDateText != null) tvEndDateText.setText(year + "-" + (month + 1) + "-" + dayOfMonth);
+                if (tvEndDateText != null) {
+                    tvEndDateText.setText(formatDate(selectedEndDate) + " 23:59");
+                }
             }
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show();
+    }
+
+    private String formatDate(long timeMillis) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(timeMillis);
+        String month = String.format(java.util.Locale.US, "%02d", calendar.get(Calendar.MONTH) + 1);
+        String day = String.format(java.util.Locale.US, "%02d", calendar.get(Calendar.DAY_OF_MONTH));
+        return calendar.get(Calendar.YEAR) + "-" + month + "-" + day;
     }
 
     private void loadActiveExam() {
         executorService.execute(() -> {
             ExamProfileEntity active = null;
-            if (db.examProfileDao().getActiveExams() != null && !db.examProfileDao().getActiveExams().isEmpty()) {
-                active = db.examProfileDao().getActiveExams().get(0);
-            } else if (db.examProfileDao().getPendingExams() != null && !db.examProfileDao().getPendingExams().isEmpty()) {
-                active = db.examProfileDao().getPendingExams().get(0);
+            List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
+            if (activeExams != null && !activeExams.isEmpty()) {
+                active = activeExams.get(0);
+            } else {
+                List<ExamProfileEntity> pendingExams = db.examProfileDao().getPendingExams();
+                if (pendingExams != null && !pendingExams.isEmpty()) {
+                    active = pendingExams.get(0);
+                }
             }
 
             final ExamProfileEntity finalActive = active;
@@ -191,15 +219,15 @@ public class ExamModeActivity extends AppCompatActivity {
                     etExamName.setText(finalActive.examName);
                     etExamDailyGoal.setText(String.valueOf(finalActive.dailyGoalMinutes));
                     
-                    Calendar sCal = Calendar.getInstance();
-                    sCal.setTimeInMillis(finalActive.startDate);
                     selectedStartDate = finalActive.startDate;
-                    if (tvStartDateText != null) tvStartDateText.setText(sCal.get(Calendar.YEAR) + "-" + (sCal.get(Calendar.MONTH) + 1) + "-" + sCal.get(Calendar.DAY_OF_MONTH));
+                    if (tvStartDateText != null) {
+                        tvStartDateText.setText(formatDate(finalActive.startDate) + " 00:00");
+                    }
 
-                    Calendar eCal = Calendar.getInstance();
-                    eCal.setTimeInMillis(finalActive.endDate);
                     selectedEndDate = finalActive.endDate;
-                    if (tvEndDateText != null) tvEndDateText.setText(eCal.get(Calendar.YEAR) + "-" + (eCal.get(Calendar.MONTH) + 1) + "-" + eCal.get(Calendar.DAY_OF_MONTH));
+                    if (tvEndDateText != null) {
+                        tvEndDateText.setText(formatDate(finalActive.endDate) + " 23:59");
+                    }
                 } else {
                     cardActiveExam.setVisibility(View.GONE);
                 }
@@ -280,6 +308,33 @@ public class ExamModeActivity extends AppCompatActivity {
         void onConfirm(List<String> selectedPackages);
     }
 
+    /**
+     * Cancels exam mode AND its pending alarms. Previously only the database rows were
+     * touched, so a cancelled exam could still fire its start alarm later.
+     */
+    private void cancelExamMode() {
+        executorService.execute(() -> {
+            try {
+                List<ExamProfileEntity> exams = db.examProfileDao().getAllExams();
+                if (exams != null) {
+                    for (ExamProfileEntity exam : exams) {
+                        if (exam == null || exam.status == null) continue;
+                        if ("COMPLETED".equals(exam.status) || "CANCELLED".equals(exam.status)) continue;
+                        ExamScheduler.cancelExamAlarms(getApplicationContext(), exam.id);
+                    }
+                }
+                db.examProfileDao().deactivateAllExams();
+            } catch (Exception e) {
+                android.util.Log.e("ExamModeActivity", "Failed to cancel exam mode", e);
+            }
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Exam Mode cancelled.", Toast.LENGTH_SHORT).show();
+                loadActiveExam();
+            });
+        });
+    }
+
     private void saveExamProfile() {
         String name = etExamName.getText().toString().trim();
         String goalStr = etExamDailyGoal.getText().toString().trim();
@@ -290,7 +345,12 @@ public class ExamModeActivity extends AppCompatActivity {
         }
 
         if (selectedEndDate <= selectedStartDate) {
-            Toast.makeText(this, "End date must be strictly after start date.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "End date must be on or after the start date.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (selectedEndDate < System.currentTimeMillis()) {
+            Toast.makeText(this, "End date is already in the past.", Toast.LENGTH_SHORT).show();
             return;
         }
         
@@ -318,6 +378,19 @@ public class ExamModeActivity extends AppCompatActivity {
 
         int finalGoalMins = goalMins;
         executorService.execute(() -> {
+            // Only one exam can be scheduled at a time. Without this, re-saving the prefilled
+            // form created a duplicate profile that activated on top of the real one.
+            List<ExamProfileEntity> pending = db.examProfileDao().getPendingExams();
+            if (pending != null) {
+                for (ExamProfileEntity old : pending) {
+                    if (old == null) continue;
+                    ExamScheduler.cancelExamAlarms(getApplicationContext(), old.id);
+                    old.status = "CANCELLED";
+                    old.isActive = false;
+                    db.examProfileDao().update(old);
+                }
+            }
+
             ExamProfileEntity newExam = new ExamProfileEntity(
                     name,
                     selectedStartDate,

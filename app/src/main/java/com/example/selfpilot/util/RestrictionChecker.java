@@ -99,12 +99,12 @@ public class RestrictionChecker {
             return BlockDecision.allow();
         }
 
-        int unlocksLeft = EmergencyUnlockManager.getRemainingUnlocks(context);
-
-        // 1. Frozen apps are unconditionally blocked.
+        // 1. Frozen apps are unconditionally blocked (checked first: no database read needed).
         if (FrozenAppsManager.isFrozen(context, packageName)) {
             return BlockDecision.blocked(BlockReason.FROZEN, 0, 0, 0);
         }
+
+        int unlocksLeft = EmergencyUnlockManager.getRemainingUnlocks(context);
 
         AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
         RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);

@@ -13,6 +13,7 @@ import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
 import com.example.selfpilot.service.FocusTimerService;
 import com.example.selfpilot.util.ExamScheduler;
+import com.example.selfpilot.util.ExamSessionManager;
 
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -63,30 +64,28 @@ public class BootReceiver extends BroadcastReceiver {
                     ContextCompat.startForegroundService(context, recoverIntent);
                 }
 
-                // 3. Recover Pending and Active Exam Alarms
+                // 3. Reconcile Exam Mode with the clock before re-arming any alarm, so an
+                //    exam that expired while the device was off is completed instead of
+                //    blocking apps forever.
+                ExamSessionManager.syncState(context.getApplicationContext());
+
                 List<ExamProfileEntity> pendingExams = db.examProfileDao().getPendingExams();
                 if (pendingExams != null) {
                     for (ExamProfileEntity pending : pendingExams) {
                         ExamScheduler.scheduleExam(context.getApplicationContext(), pending);
                     }
                 }
-                
+
                 List<ExamProfileEntity> activeExams = db.examProfileDao().getActiveExams();
                 if (activeExams != null) {
                     for (ExamProfileEntity active : activeExams) {
-                        // If the phone was off when the exam was supposed to end, end it now.
-                        if (System.currentTimeMillis() >= active.endDate) {
-                            Intent endIntent = new Intent(context, ExamAlarmReceiver.class);
-                            endIntent.setAction(ExamAlarmReceiver.ACTION_EXAM_END);
-                            endIntent.putExtra(ExamAlarmReceiver.EXTRA_EXAM_ID, active.id);
-                            context.sendBroadcast(endIntent);
-                        } else {
-                            // Re-schedule the end alarm to ensure it completes successfully later
-                            ExamScheduler.scheduleExam(context.getApplicationContext(), active);
-                        }
+                        // Re-arm the end alarm; the start alarm firing immediately is harmless
+                        // because state transitions are derived from the dates.
+                        ExamScheduler.scheduleExam(context.getApplicationContext(), active);
                     }
                 }
             });
         }
     }
 }
+

@@ -1,7 +1,12 @@
 package com.example.selfpilot.service;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.provider.Telephony;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
+import android.telecom.TelecomManager;
+import android.util.Log;
 
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.RestrictionRuleEntity;
@@ -10,43 +15,62 @@ import com.example.selfpilot.util.RestrictionChecker;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Suppresses notifications from blocked apps.
+ *
+ * The exam screen has "Allow calls" / "Allow messages" switches - they were written to
+ * SharedPreferences but never read anywhere, so they did nothing. They are honoured here:
+ * during Exam Mode the default dialer and SMS app keep their notifications when allowed.
+ *
+ * Note: a normal app cannot stop an incoming call from ringing on Android; the switches only
+ * control whether the call/SMS notification is suppressed.
+ */
 public class SelfPilotNotificationListener extends NotificationListenerService {
+
+    private static final String TAG = "SELF_PILOT_FREEZER";
+    private static final String PREFS = "SelfPilotPrefs";
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null) return;
-        
-        String packageName = sbn.getPackageName();
+
+        final String packageName = sbn.getPackageName();
         if (packageName == null || packageName.equals(getPackageName())) return;
+        final String key = sbn.getKey();
+
+        if (executorService.isShutdown()) return;
 
         executorService.execute(() -> {
-            boolean isRestrictedBySystem = RestrictionChecker.isAppRestricted(this, packageName);
-            
-            AppDatabase db = AppDatabase.getDatabase(this);
-            boolean isFrozen = db.frozenAppDao().getFrozenApp(packageName) != null;
+            try {
+                RestrictionChecker.BlockDecision decision =
+                        RestrictionChecker.evaluate(getApplicationContext(), packageName);
+                if (!decision.isBlocked()) return;
 
-            if (isFrozen) {
-                // Bug 3 Fix: If an app is explicitly marked as frozen, we actively suppress its notifications
-                // if the user has granted the Notification Listener permission.
-                cancelNotification(sbn.getKey());
-            } else if (isRestrictedBySystem) {
                 boolean shouldCancel = false;
-                if (db.focusSessionDao().getActiveSession() != null) {
-                    shouldCancel = true;
-                } else if (db.examProfileDao().getActiveExams() != null && !db.examProfileDao().getActiveExams().isEmpty()) {
-                    shouldCancel = true;
-                } else {
-                    RestrictionRuleEntity rule = db.restrictionRuleDao().getRuleByPackageName(packageName);
-                    if (rule != null && rule.suppressNotifications) {
+                switch (decision.reason) {
+                    case FROZEN:
                         shouldCancel = true;
-                    }
+                        break;
+                    case EXAM_MODE:
+                        shouldCancel = !isCommunicationAllowed(packageName);
+                        break;
+                    case FOCUS_MODE:
+                        shouldCancel = true;
+                        break;
+                    default:
+                        RestrictionRuleEntity rule = AppDatabase.getDatabase(getApplicationContext())
+                                .restrictionRuleDao().getRuleByPackageName(packageName);
+                        shouldCancel = rule != null && rule.suppressNotifications;
+                        break;
                 }
-                
+
                 if (shouldCancel) {
-                    cancelNotification(sbn.getKey());
+                    cancelNotification(key);
                 }
+            } catch (Exception e) {
+                Log.w(TAG, "[NOTIF] failed to evaluate notification from " + packageName, e);
             }
         });
     }
@@ -60,5 +84,38 @@ public class SelfPilotNotificationListener extends NotificationListenerService {
     public void onDestroy() {
         super.onDestroy();
         executorService.shutdown();
+    }
+
+    /**
+     * True when the package is the default dialer / SMS app and the user allowed it during
+     * Exam Mode. Only ever keeps a notification the app would otherwise suppress.
+     */
+    private boolean isCommunicationAllowed(String packageName) {
+        SharedPreferences prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        boolean allowCalls = prefs.getBoolean("exam_allow_calls", true);
+        boolean allowMessages = prefs.getBoolean("exam_allow_messages", false);
+
+        if (allowMessages) {
+            try {
+                String smsPackage = Telephony.Sms.getDefaultSmsPackage(this);
+                if (packageName.equals(smsPackage)) return true;
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (allowCalls) {
+            try {
+                TelecomManager telecomManager =
+                        (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+                if (telecomManager != null && packageName.equals(telecomManager.getDefaultDialerPackage())) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+            // In-call UI of any dialer.
+            if (packageName.contains("incall") || packageName.contains("dialer")) return true;
+        }
+
+        return false;
     }
 }

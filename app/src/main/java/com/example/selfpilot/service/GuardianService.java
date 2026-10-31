@@ -25,6 +25,7 @@ import com.example.selfpilot.MainActivity;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.receiver.GuardianRestartReceiver;
+import com.example.selfpilot.util.ExamSessionManager;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.ShizukuUtil;
 
@@ -239,6 +240,9 @@ public class GuardianService extends Service {
         // The cache may have been dropped with the process that hosted it.
         FrozenAppsManager.ensureInitialized(this);
 
+        // Exam Mode must not depend solely on its alarms: catch up on missed start/end events.
+        executor.execute(() -> ExamSessionManager.syncStateAndRescore(this));
+
         final int frozenCount = FrozenAppsManager.getFrozenPackages().size();
         updateNotification(frozenCount, accessibilityEnabled);
 
@@ -428,3 +432,4 @@ public class GuardianService extends Service {
         }
     }
 }
+

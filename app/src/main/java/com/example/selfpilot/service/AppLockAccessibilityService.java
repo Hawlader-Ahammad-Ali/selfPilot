@@ -16,6 +16,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 
 import com.example.selfpilot.ui.block.BlockActivity;
 import com.example.selfpilot.util.EmergencyUnlockManager;
+import com.example.selfpilot.util.ExamSessionManager;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
@@ -360,6 +361,15 @@ public class AppLockAccessibilityService extends AccessibilityService {
         if (now - lastCacheReconcileAt < CACHE_RECONCILE_INTERVAL_MS) return;
         lastCacheReconcileAt = now;
         FrozenAppsManager.reconcile(this);
+
+        // Keep Exam Mode in step with the clock even if its alarms were missed.
+        bgExecutor.execute(() -> {
+            try {
+                ExamSessionManager.syncStateAndRescore(getApplicationContext());
+            } catch (Throwable t) {
+                Log.w(TAG, "[EXAM] sync failed", t);
+            }
+        });
     }
 
     /**
@@ -606,6 +616,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
     }
 }
+
 
 
 

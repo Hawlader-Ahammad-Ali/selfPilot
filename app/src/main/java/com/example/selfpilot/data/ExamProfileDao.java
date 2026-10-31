@@ -30,4 +30,11 @@ public interface ExamProfileDao {
 
     @Query("UPDATE exam_profiles SET isActive = 0, status = 'CANCELLED' WHERE status = 'PENDING' OR status = 'ACTIVE'")
     void deactivateAllExams();
+
+    /**
+     * XP earned by exams that ended within the given window. Used by the score calculator so
+     * exam XP survives a recalculation instead of being overwritten.
+     */
+    @Query("SELECT COALESCE(SUM(xpEarned), 0) FROM exam_profiles WHERE endDate >= :startOfDay AND endDate < :endOfDay")
+    int getExamXpBetween(long startOfDay, long endOfDay);
 }
