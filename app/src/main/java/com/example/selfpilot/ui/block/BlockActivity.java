@@ -3,6 +3,8 @@ package com.example.selfpilot.ui.block;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
@@ -40,13 +42,45 @@ public class BlockActivity extends AppCompatActivity {
     private TextView tvBlockedMessage;
     private EmergencyUnlockEntity todayUnlockEntity;
 
+    private static final long FROZEN_RECHECK_MS = 800L;
+
+    private final Handler guardHandler = new Handler(Looper.getMainLooper());
+
+    /**
+     * While this screen is visible, keep validating that the target is still frozen.
+     * Once the user unfreezes the app from SelfPilot, the block screen must disappear
+     * instead of trapping the user on a screen for an app that is no longer frozen.
+     */
+    private final Runnable frozenRecheck = new Runnable() {
+        @Override
+        public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            if (targetPackageName == null) {
+                goHome();
+                return;
+            }
+            if (!FrozenAppsManager.isFrozen(getApplicationContext(), targetPackageName)) {
+                Log.i(TAG, "[BLOCK_SCREEN] Target no longer frozen -> closing block screen");
+                finish();
+                return;
+            }
+            guardHandler.postDelayed(this, FROZEN_RECHECK_MS);
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         targetPackageName = getIntent().getStringExtra(EXTRA_PACKAGE_NAME);
-        if (targetPackageName == null || targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
-            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity invoked for SelfPilot or null target -> finishing immediately");
+        if (targetPackageName == null) {
+            // A malformed launch must never reveal whatever is behind this screen.
+            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity invoked without target -> going Home");
+            goHome();
+            return;
+        }
+        if (targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
+            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity invoked for SelfPilot -> finishing");
             finish();
             return;
         }
@@ -92,8 +126,13 @@ public class BlockActivity extends AppCompatActivity {
         setIntent(intent);
         targetPackageName = intent.getStringExtra(EXTRA_PACKAGE_NAME);
         Log.i(TAG, "[BLOCK_SCREEN] onNewIntent: targetPkg=" + targetPackageName);
-        if (targetPackageName == null || targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
-            Log.w(TAG, "[BLOCK_SCREEN] BlockActivity onNewIntent for SelfPilot or null target -> finishing immediately");
+        if (targetPackageName == null) {
+            Log.w(TAG, "[BLOCK_SCREEN] onNewIntent without target -> going Home");
+            goHome();
+            return;
+        }
+        if (targetPackageName.equals(getPackageName()) || "com.example.selfpilot".equals(targetPackageName)) {
+            Log.w(TAG, "[BLOCK_SCREEN] onNewIntent for SelfPilot -> finishing");
             finish();
             return;
         }
@@ -104,26 +143,41 @@ public class BlockActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         Log.i(TAG, "[BLOCK_SCREEN] onResume: targetPkg=" + targetPackageName);
+        guardHandler.removeCallbacks(frozenRecheck);
+        guardHandler.postDelayed(frozenRecheck, FROZEN_RECHECK_MS);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         Log.i(TAG, "[BLOCK_SCREEN] onPause: targetPkg=" + targetPackageName);
+        guardHandler.removeCallbacks(frozenRecheck);
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         Log.i(TAG, "[BLOCK_SCREEN] onStop: targetPkg=" + targetPackageName);
+        guardHandler.removeCallbacks(frozenRecheck);
+    }
+
+    @Override
+    protected void onDestroy() {
+        guardHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     private void goHome() {
+        guardHandler.removeCallbacks(frozenRecheck);
         Log.i(TAG, "[BLOCK_SCREEN] Navigating to Home launcher");
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(homeIntent);
+        try {
+            Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+            homeIntent.addCategory(Intent.CATEGORY_HOME);
+            homeIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(homeIntent);
+        } catch (Throwable t) {
+            Log.e(TAG, "[BLOCK_SCREEN] Failed to open Home", t);
+        }
         finish();
     }
 

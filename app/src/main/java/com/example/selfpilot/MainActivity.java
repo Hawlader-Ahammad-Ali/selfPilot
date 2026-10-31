@@ -1,10 +1,15 @@
 package com.example.selfpilot;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -20,6 +25,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         com.example.selfpilot.util.FrozenAppsManager.init(this);
+        ensureGuardianRunning();
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         
@@ -45,6 +51,25 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleNavigationIntent();
+    }
+
+    /**
+     * SelfPilot must always keep running in the background: the freezer is only as reliable
+     * as the process that enforces it.
+     */
+    private void ensureGuardianRunning() {
+        requestNotificationPermission();
+        com.example.selfpilot.service.GuardianService.start(this);
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        ActivityCompat.requestPermissions(
+                this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
     }
 
     private void handleNavigationIntent() {

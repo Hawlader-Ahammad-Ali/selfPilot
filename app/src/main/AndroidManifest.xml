@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -56,6 +58,19 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Focus Timer" />
         </service>
 
+        <!-- Always-on guardian: keeps freezer enforcement alive in the background, even
+             when SelfPilot is swiped away from recents (stopWithTask=false + START_STICKY). -->
+        <service
+            android:name=".service.GuardianService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse"
+            tools:ignore="ForegroundServicePermission">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="App freezer background guardian" />
+        </service>
+
         <service
             android:name=".service.AppLockAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -87,6 +102,10 @@
         </receiver>
 
         <receiver android:name=".receiver.ExamAlarmReceiver" android:exported="false"/>
+
+        <receiver
+            android:name=".receiver.GuardianRestartReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

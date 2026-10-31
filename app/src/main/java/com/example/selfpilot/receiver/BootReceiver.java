@@ -24,6 +24,10 @@ public class BootReceiver extends BroadcastReceiver {
         if (intent != null && (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()) ||
                 Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction()))) {
             com.example.selfpilot.util.FrozenAppsManager.init(context);
+
+            // Bring the always-on guardian back before anything else so the freezer is
+            // enforcing again as early as possible after a reboot.
+            com.example.selfpilot.service.GuardianService.start(context);
             
             Executors.newSingleThreadExecutor().execute(() -> {
                 AppDatabase db = AppDatabase.getDatabase(context.getApplicationContext());
