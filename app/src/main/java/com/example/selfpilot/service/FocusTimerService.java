@@ -122,6 +122,9 @@ public class FocusTimerService extends Service {
                 FocusSessionEntity session = new FocusSessionEntity(now, endTime, storedMinutes);
                 activeSessionId = (int) db.focusSessionDao().insert(session);
 
+                // Cache immediately so the watchdog and notification suppression start at once.
+                FocusSessionManager.markActive(endTime);
+
                 beginCountdown(durationMillis);
             } catch (Exception e) {
                 Log.e(TAG, "[FOCUS] failed to start session", e);

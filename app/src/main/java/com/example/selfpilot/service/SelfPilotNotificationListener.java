@@ -10,6 +10,7 @@ import android.util.Log;
 
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.util.FocusSessionManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
 import java.util.concurrent.ExecutorService;
@@ -41,6 +42,13 @@ public class SelfPilotNotificationListener extends NotificationListenerService {
         final String key = sbn.getKey();
 
         if (executorService.isShutdown()) return;
+
+        // Focus Mode silences every app, not only restricted ones.
+        if (FocusSessionManager.isFocusActive()) {
+            Log.i(TAG, "[NOTIF] Focus session active - suppressing notification from " + packageName);
+            cancelNotification(key);
+            return;
+        }
 
         executorService.execute(() -> {
             try {
@@ -119,3 +127,4 @@ public class SelfPilotNotificationListener extends NotificationListenerService {
         return false;
     }
 }
+

@@ -36,6 +36,13 @@
             android:windowSoftInputMode="adjustResize">
         </activity>
 
+        <!-- Focus countdown screen: back is blocked here until the session ends. -->
+        <activity
+            android:name=".ui.focus.FocusLockActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.SelfPilot" />
+
         <activity
             android:name=".ui.block.BlockActivity"
             android:launchMode="singleTask"

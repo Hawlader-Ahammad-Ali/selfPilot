@@ -19,6 +19,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -282,6 +283,29 @@ public class FocusFragment extends Fragment {
             seconds = currentPresetMillis() / 1000L;
         }
 
+        showFocusTermsAndStart(seconds);
+    }
+
+    /**
+     * The rules are stated once, before the session starts. Everything below is enforced by
+     * the accessibility service and the notification listener, not just by this screen.
+     */
+    private void showFocusTermsAndStart(final long seconds) {
+        if (getContext() == null) return;
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle("Before you start")
+                .setMessage("Until the timer ends:\n\n"
+                        + "\u2022 Back, Home and Recents will not take you out of Focus Mode\n"
+                        + "\u2022 Notifications and their sounds from every app are suppressed\n"
+                        + "\u2022 The countdown screen shows no status bar\n\n"
+                        + "The session ends only when the timer reaches zero.")
+                .setPositiveButton("Start Focus Session", (dialog, which) -> launchSession(seconds))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void launchSession(final long seconds) {
         Intent intent = new Intent(getContext(), FocusTimerService.class);
         intent.setAction(FocusTimerService.ACTION_START);
         intent.putExtra(FocusTimerService.EXTRA_DURATION_SECONDS, seconds);
@@ -292,20 +316,21 @@ public class FocusFragment extends Fragment {
         isTimerRunning = true;
         updateButtonsState();
         updateTimerUI(seconds * 1000L);
-        notifyFocusLockChanged();
-    }
 
-    /** Tells the host activity that the session state changed (shows/removes the lock screen). */
-    private void notifyFocusLockChanged() {
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).onFocusSessionStateChanged();
+        // Hand over to the dedicated countdown screen: from there no back navigation exists.
+        View root = getView();
+        if (root != null) {
+            root.postDelayed(() -> {
+                if (isAdded()) {
+                    FocusLockActivity.start(requireContext());
+                }
+            }, 300L);
         }
     }
 
     private void handleTimerFinished(int xpEarned) {
         isTimerRunning = false;
         updateButtonsState();
-        notifyFocusLockChanged();
 
         updateTimerUI(currentPresetMillis());
 
@@ -341,3 +366,4 @@ public class FocusFragment extends Fragment {
         }
     }
 }
+

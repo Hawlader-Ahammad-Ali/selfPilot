@@ -70,6 +70,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
     /** Time allowed for the home / SelfPilot transition before the block surface is detached.
      *  Together with the 180 ms content fade this keeps the exit well under half a second. */
     private static final long OVERLAY_EXIT_VERIFY_MS = 340L;
+    private static final long FOCUS_LOCK_PUSH_DEBOUNCE_MS = 700L;
 
     private final Handler watchdogHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
@@ -78,6 +79,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
     private BlockOverlayController overlayController;
     private final Map<String, String> appLabelCache = new HashMap<>();
     private long lastCacheReconcileAt = 0L;
+    private long lastFocusLockPushAt = 0L;
 
     private volatile boolean watchdogActive = false;
 
@@ -221,6 +223,14 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
 
         // 2. The user left the blocked app: drop the block surface immediately.
+        // 2. Focus Mode owns the screen until the timer ends: whatever the user opens -
+        //    launcher, recents or another app - the countdown comes straight back.
+        if (FocusSessionManager.isFocusActive()) {
+            dismissStaleOverlay(foreground);
+            bringFocusLockToFront();
+            return;
+        }
+
         dismissStaleOverlay(foreground);
 
         if (isProtectedPackage(foreground)) return;
@@ -400,6 +410,21 @@ public class AppLockAccessibilityService extends AccessibilityService {
                 lastRestrictionCheckAt = 0L;
             });
         });
+    }
+
+    /**
+     * Puts the focus countdown back in front after Home, Recents or another app stole the
+     * foreground. Debounced so a single press cannot start the screen repeatedly.
+     */
+    private void bringFocusLockToFront() {
+        if (com.example.selfpilot.ui.focus.FocusLockActivity.VISIBLE) return;
+
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastFocusLockPushAt < FOCUS_LOCK_PUSH_DEBOUNCE_MS) return;
+        lastFocusLockPushAt = now;
+
+        Log.i(TAG, "[FOCUS] Countdown not in front - restoring focus screen");
+        com.example.selfpilot.ui.focus.FocusLockActivity.start(this);
     }
 
     private void dismissStaleOverlay(String foreground) {
@@ -677,6 +702,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
     }
 }
+
 
 
 

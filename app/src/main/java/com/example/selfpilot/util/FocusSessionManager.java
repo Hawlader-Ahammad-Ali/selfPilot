@@ -22,9 +22,25 @@ public class FocusSessionManager {
 
     private static final String TAG = "SELF_PILOT_FREEZER";
 
+    /** Cached so the 300 ms watchdog and the notification listener never touch the database. */
+    private static volatile boolean activeCache = false;
+    private static volatile long activeEndTime = 0L;
+
     /** XP for a completed session, reduced by every emergency unlock used inside it. */
     public static int calculateXp(int emergencyUnlocksUsed) {
         return Math.max(0, 20 - (5 * emergencyUnlocksUsed));
+    }
+
+    /** Cheap non-blocking check for hot paths (foreground watchdog, notification suppression). */
+    public static boolean isFocusActive() {
+        if (com.example.selfpilot.service.FocusTimerService.isRunning()) return true;
+        return activeCache && System.currentTimeMillis() < activeEndTime;
+    }
+
+    /** Called when a session is created so the cache is correct before the first sync. */
+    public static void markActive(long endTime) {
+        activeEndTime = endTime;
+        activeCache = endTime > System.currentTimeMillis();
     }
 
     public static FocusSessionEntity getActiveSession(Context context) {
@@ -63,6 +79,8 @@ public class FocusSessionManager {
             db.focusSessionDao().update(session);
 
             Log.i(TAG, "[FOCUS] Session completed, XP " + session.xpEarned);
+            activeCache = false;
+            activeEndTime = 0L;
             ScoreCalculator.calculateAndSaveDailyScore(context.getApplicationContext());
             return true;
         } catch (Exception e) {
@@ -79,9 +97,16 @@ public class FocusSessionManager {
     public static boolean syncState(Context context) {
         if (context == null) return false;
         FocusSessionEntity active = getActiveSession(context);
-        if (active == null) return false;
+        if (active == null) {
+            activeCache = false;
+            activeEndTime = 0L;
+            return false;
+        }
 
-        if (System.currentTimeMillis() < active.endTime) return false;
+        if (System.currentTimeMillis() < active.endTime) {
+            markActive(active.endTime);
+            return false;
+        }
 
         return completeSession(context, active);
     }
