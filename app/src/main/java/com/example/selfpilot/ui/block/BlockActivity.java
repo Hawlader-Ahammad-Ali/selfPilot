@@ -86,6 +86,7 @@ public class BlockActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_block);
+        com.example.selfpilot.util.SystemBarInsets.apply(findViewById(R.id.block_root));
 
         db = AppDatabase.getDatabase(getApplicationContext());
 
@@ -329,3 +330,4 @@ public class BlockActivity extends AppCompatActivity {
         return calendar.getTimeInMillis();
     }
 }
+

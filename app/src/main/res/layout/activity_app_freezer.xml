@@ -98,7 +98,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:background="@null"
-                android:drawableStart="@android:drawable/ic_menu_search"
+                android:drawableStart="@drawable/ic_search"
                 android:drawablePadding="12dp"
                 android:hint="Search frozen apps..."
                 android:inputType="text"
@@ -175,3 +175,4 @@
         app:iconTint="@color/white" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
+

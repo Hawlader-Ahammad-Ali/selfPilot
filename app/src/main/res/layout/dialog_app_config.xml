@@ -66,7 +66,7 @@
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:layout_gravity="center"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:src="@drawable/ic_close"
                 app:tint="@color/exam_text_secondary"/>
         </FrameLayout>
 
@@ -119,7 +119,7 @@
                 <ImageView
                     android:layout_width="28dp"
                     android:layout_height="28dp"
-                    android:src="@android:drawable/btn_star_big_on"
+                    android:src="@drawable/ic_star"
                     app:tint="@color/purple_accent_light" />
 
                 <LinearLayout
@@ -162,7 +162,7 @@
                 <ImageView
                     android:layout_width="28dp"
                     android:layout_height="28dp"
-                    android:src="@android:drawable/ic_secure"
+                    android:src="@drawable/ic_shield"
                     app:tint="@color/purple_accent_light" />
 
                 <LinearLayout
@@ -205,7 +205,7 @@
                 <ImageView
                     android:layout_width="28dp"
                     android:layout_height="28dp"
-                    android:src="@android:drawable/ic_popup_reminder"
+                    android:src="@drawable/ic_bell"
                     app:tint="@color/purple_accent_light" />
 
                 <LinearLayout
@@ -261,7 +261,7 @@
             <ImageView
                 android:layout_width="28dp"
                 android:layout_height="28dp"
-                android:src="@android:drawable/ic_menu_recent_history"
+                android:src="@drawable/ic_history"
                 app:tint="@color/purple_accent_light" />
 
             <LinearLayout

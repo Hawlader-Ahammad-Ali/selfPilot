@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +23,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import com.example.selfpilot.MainActivity;
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FocusSessionEntity;
@@ -93,9 +96,77 @@ public class FocusFragment extends Fragment {
         executorService = Executors.newSingleThreadExecutor();
 
         setupPresetListeners();
+        setupCustomDurationFormatting();
         btnStart.setOnClickListener(v -> startTimer());
 
         return view;
+    }
+
+    /**
+     * Keeps the custom field in a strict HH:MM:SS shape while typing, so the value can never
+     * be ambiguous between minutes and hours.
+     */
+    private void setupCustomDurationFormatting() {
+        etCustomMinutes.addTextChangedListener(new TextWatcher() {
+            private boolean formatting = false;
+
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (formatting) return;
+                formatting = true;
+
+                String digits = s.toString().replaceAll("[^0-9]", "");
+                if (digits.length() > 6) {
+                    digits = digits.substring(0, 6);
+                }
+
+                StringBuilder out = new StringBuilder();
+                for (int i = 0; i < digits.length(); i++) {
+                    if (i == 2 || i == 4) out.append(':');
+                    out.append(digits.charAt(i));
+                }
+
+                etCustomMinutes.setText(out.toString());
+                etCustomMinutes.setSelection(out.length());
+                formatting = false;
+            }
+        });
+    }
+
+    /** "HH:MM:SS" -> total seconds, or -1 when the value is not a complete timestamp. */
+    private static long parseHmsSeconds(String value) {
+        if (value == null) return -1L;
+        String trimmed = value.trim();
+        if (!trimmed.matches("\\d{2}:\\d{2}:\\d{2}")) return -1L;
+
+        String[] parts = trimmed.split(":");
+        try {
+            long hours = Long.parseLong(parts[0]);
+            long minutes = Long.parseLong(parts[1]);
+            long seconds = Long.parseLong(parts[2]);
+            if (minutes > 59 || seconds > 59) return -1L;
+
+            long total = hours * 3600 + minutes * 60 + seconds;
+            return total > 0 ? total : -1L;
+        } catch (Exception e) {
+            return -1L;
+        }
+    }
+
+    private static String formatHms(long millis) {
+        long totalSeconds = Math.max(0L, millis) / 1000L;
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds);
     }
 
     private void setupPresetListeners() {
@@ -147,12 +218,8 @@ public class FocusFragment extends Fragment {
         if (rb60Min.isChecked()) return 60 * 60 * 1000L;
         if (rb120Min.isChecked()) return 120 * 60 * 1000L;
         if (rbCustomMin.isChecked()) {
-            String custom = etCustomMinutes.getText().toString().trim();
-            try {
-                int minutes = Integer.parseInt(custom);
-                if (minutes > 0) return minutes * 60 * 1000L;
-            } catch (Exception ignored) {
-            }
+            long seconds = parseHmsSeconds(etCustomMinutes.getText().toString());
+            if (seconds > 0) return seconds * 1000L;
         }
         return 15 * 60 * 1000L;
     }
@@ -199,39 +266,46 @@ public class FocusFragment extends Fragment {
     }
 
     private void startTimer() {
-        int durationMins = 15;
-        if (rb30Min.isChecked()) {
-            durationMins = 30;
-        } else if (rb60Min.isChecked()) {
-            durationMins = 60;
-        } else if (rb120Min.isChecked()) {
-            durationMins = 120;
-        } else if (rbCustomMin.isChecked()) {
-            String customStr = etCustomMinutes.getText().toString().trim();
-            try {
-                durationMins = Integer.parseInt(customStr);
-            } catch (Exception e) {
-                durationMins = 15;
+        long seconds;
+
+        if (rbCustomMin.isChecked()) {
+            seconds = parseHmsSeconds(etCustomMinutes.getText().toString());
+            if (seconds <= 0) {
+                Toast.makeText(getContext(),
+                        "Enter the duration as HH:MM:SS (for example 00:45:00)",
+                        Toast.LENGTH_LONG).show();
+                return;
             }
             // Clamp so an accidental huge value cannot create an endless session.
-            if (durationMins <= 0) durationMins = 15;
-            if (durationMins > 720) durationMins = 720;
+            if (seconds > 12 * 3600L) seconds = 12 * 3600L;
+        } else {
+            seconds = currentPresetMillis() / 1000L;
         }
 
         Intent intent = new Intent(getContext(), FocusTimerService.class);
         intent.setAction(FocusTimerService.ACTION_START);
-        intent.putExtra(FocusTimerService.EXTRA_DURATION, durationMins);
+        intent.putExtra(FocusTimerService.EXTRA_DURATION_SECONDS, seconds);
         if (getActivity() != null) {
             ContextCompat.startForegroundService(requireContext(), intent);
         }
 
         isTimerRunning = true;
         updateButtonsState();
+        updateTimerUI(seconds * 1000L);
+        notifyFocusLockChanged();
+    }
+
+    /** Tells the host activity that the session state changed (shows/removes the lock screen). */
+    private void notifyFocusLockChanged() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onFocusSessionStateChanged();
+        }
     }
 
     private void handleTimerFinished(int xpEarned) {
         isTimerRunning = false;
         updateButtonsState();
+        notifyFocusLockChanged();
 
         updateTimerUI(currentPresetMillis());
 
@@ -240,10 +314,7 @@ public class FocusFragment extends Fragment {
     }
 
     private void updateTimerUI(long timeLeftInMillis) {
-        int minutes = (int) (timeLeftInMillis / 1000) / 60;
-        int seconds = (int) (timeLeftInMillis / 1000) % 60;
-        String timeFormatted = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
-        tvTimer.setText(timeFormatted);
+        tvTimer.setText(formatHms(timeLeftInMillis));
     }
 
     private void updateButtonsState() {

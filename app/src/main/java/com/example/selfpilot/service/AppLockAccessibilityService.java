@@ -67,6 +67,9 @@ public class AppLockAccessibilityService extends AccessibilityService {
 
     /** How often the in-memory frozen cache is reconciled against the database. */
     private static final long CACHE_RECONCILE_INTERVAL_MS = 20_000L;
+    /** Time allowed for the home / SelfPilot transition before the block surface is detached.
+     *  Together with the 180 ms content fade this keeps the exit well under half a second. */
+    private static final long OVERLAY_EXIT_VERIFY_MS = 340L;
 
     private final Handler watchdogHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService bgExecutor = Executors.newSingleThreadExecutor();
@@ -115,9 +118,7 @@ public class AppLockAccessibilityService extends AccessibilityService {
         FrozenAppsManager.init(this);
         refreshLauncherPackages();
 
-        if (overlayController == null) {
-            overlayController = new BlockOverlayController(this);
-        }
+        ensureOverlay();
 
         // Keep the always-on guardian alive whenever enforcement is available again.
         GuardianService.start(this);
@@ -308,9 +309,67 @@ public class AppLockAccessibilityService extends AccessibilityService {
     }
 
     private void ensureOverlay() {
-        if (overlayController == null) {
-            overlayController = new BlockOverlayController(this);
+        if (overlayController != null) return;
+
+        overlayController = new BlockOverlayController(this);
+        overlayController.setExitHandler(new BlockOverlayController.ExitHandler() {
+            @Override
+            public void onGoHome() {
+                goHomeFromOverlay();
+            }
+
+            @Override
+            public void onOpenSelfPilot() {
+                openSelfPilotFromOverlay();
+            }
+        });
+    }
+
+    /**
+     * Exit path for the "Go to Home screen" button.
+     *
+     * The block surface is NOT removed here: the content has already faded out, but the opaque
+     * backdrop stays until the launcher is actually in front. Removing it first was what made
+     * the blocked app flash for a few frames.
+     */
+    private void goHomeFromOverlay() {
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME);
+        } catch (Throwable t) {
+            Log.w(TAG, "[OVERLAY] HOME action failed", t);
         }
+        watchdogHandler.postDelayed(this::completeOverlayExit, OVERLAY_EXIT_VERIFY_MS);
+    }
+
+    private void openSelfPilotFromOverlay() {
+        try {
+            Intent intent = new Intent(this, com.example.selfpilot.MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.putExtra("NAVIGATE_TO", com.example.selfpilot.R.id.navigation_home);
+            startActivity(intent);
+        } catch (Throwable t) {
+            Log.e(TAG, "[OVERLAY] Failed to open SelfPilot", t);
+        }
+        watchdogHandler.postDelayed(this::completeOverlayExit, OVERLAY_EXIT_VERIFY_MS);
+    }
+
+    /**
+     * Detaches the block surface only once the destination is on screen. If the blocked app is
+     * still in front (Home did not land), the surface is restored instead of being removed.
+     */
+    private void completeOverlayExit() {
+        if (overlayController == null || !overlayController.isShowing()) return;
+
+        String target = overlayController.getTargetPackage();
+        String foreground = resolveForegroundPackage();
+
+        if (target != null && target.equals(foreground)) {
+            Log.w(TAG, "[OVERLAY] Destination not ready - keeping the block surface");
+            overlayController.cancelExit();
+            return;
+        }
+
+        overlayController.hide();
     }
 
     private String labelFor(String packageName) {

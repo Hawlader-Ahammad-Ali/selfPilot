@@ -47,12 +47,28 @@ public class BlockOverlayController {
     private static final int COLOR_MUTED = 0xFF9A94AD;
     private static final int COLOR_PRIMARY = 0xFF6C4FD8;
 
+    private static final long CONTENT_FADE_MS = 180L;
+
     private final AccessibilityService service;
     private final WindowManager windowManager;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private View overlayView;
+    private LinearLayout overlayContent;
     private String currentKey;
+    private boolean exiting = false;
+    private ExitHandler exitHandler;
+
+    /** Implemented by the accessibility service, which owns the foreground detection used to
+     *  decide when it is safe to actually detach the block surface. */
+    public interface ExitHandler {
+        void onGoHome();
+        void onOpenSelfPilot();
+    }
+
+    public void setExitHandler(ExitHandler handler) {
+        this.exitHandler = handler;
+    }
 
     /** Immutable description of what to show. */
     public static class BlockSpec {
@@ -113,6 +129,49 @@ public class BlockOverlayController {
         }
     }
 
+    /**
+     * Leaves the block surface without flashing the blocked app.
+     *
+     * The old implementation removed the window first and only then pressed Home, so for a
+     * few frames the frozen app was visible again - the "blink" the user saw. Now the opaque
+     * backdrop stays in place while the content fades out and the destination screen is being
+     * drawn; the window is only detached once the launcher is actually in front (detected by
+     * the watchdog) or by the exit timeout, whichever comes first.
+     */
+    public void animateOut() {
+        if (overlayView == null || exiting) return;
+        exiting = true;
+
+        if (overlayContent != null) {
+            overlayContent.animate()
+                    .alpha(0f)
+                    .scaleX(0.96f)
+                    .scaleY(0.96f)
+                    .setDuration(CONTENT_FADE_MS)
+                    .start();
+        }
+    }
+
+    /**
+     * Reverts {@link #animateOut()} when the destination screen never came up, so the user is
+     * not left looking at a blank surface.
+     */
+    public void cancelExit() {
+        exiting = false;
+        if (overlayContent != null) {
+            overlayContent.animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(120L)
+                    .start();
+        }
+    }
+
+    public boolean isExiting() {
+        return exiting;
+    }
+
     private void applySpec(BlockSpec spec) {
         String key = spec.key();
         if (overlayView != null && key.equals(currentKey)) return;
@@ -123,6 +182,7 @@ public class BlockOverlayController {
             windowManager.addView(view, buildParams());
             overlayView = view;
             currentKey = key;
+            exiting = false;
             Log.i(TAG, "[OVERLAY] Block surface shown (" + spec.badge + ") for " + spec.packageName);
         } catch (Throwable t) {
             Log.e(TAG, "[OVERLAY] Failed to show overlay for " + spec.packageName, t);
@@ -132,11 +192,15 @@ public class BlockOverlayController {
     public void hide() {
         if (overlayView == null) {
             currentKey = null;
+            overlayContent = null;
+            exiting = false;
             return;
         }
         View view = overlayView;
         overlayView = null;
+        overlayContent = null;
         currentKey = null;
+        exiting = false;
 
         Runnable remove = () -> {
             try {
@@ -187,6 +251,7 @@ public class BlockOverlayController {
         column.setOrientation(LinearLayout.VERTICAL);
         column.setGravity(Gravity.CENTER_HORIZONTAL);
         column.setPadding(dp(28), dp(28), dp(28), dp(28));
+        overlayContent = column;
 
         FrameLayout.LayoutParams columnParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -225,8 +290,13 @@ public class BlockOverlayController {
 
         TextView goHome = actionButton("Go to Home screen", false);
         goHome.setOnClickListener(v -> {
-            hide();
-            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME);
+            animateOut();
+            if (exitHandler != null) {
+                exitHandler.onGoHome();
+            } else {
+                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME);
+                hide();
+            }
         });
         column.addView(goHome, buttonParams());
 
@@ -242,8 +312,13 @@ public class BlockOverlayController {
 
         TextView openSelfPilot = actionButton("Open SelfPilot", true);
         openSelfPilot.setOnClickListener(v -> {
-            hide();
-            openSelfPilot();
+            animateOut();
+            if (exitHandler != null) {
+                exitHandler.onOpenSelfPilot();
+            } else {
+                openSelfPilot();
+                hide();
+            }
         });
         column.addView(openSelfPilot, buttonParams());
 

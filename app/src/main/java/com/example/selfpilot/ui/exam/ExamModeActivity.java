@@ -74,6 +74,7 @@ public class ExamModeActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_exam_mode);
+        com.example.selfpilot.util.SystemBarInsets.apply(findViewById(R.id.exam_mode_root));
 
         etExamName = findViewById(R.id.etExamName);
         etExamDailyGoal = findViewById(R.id.etExamDailyGoal);
@@ -419,3 +420,4 @@ public class ExamModeActivity extends AppCompatActivity {
         }
     }
 }
+

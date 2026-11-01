@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/block_root"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -14,7 +15,7 @@
         android:layout_height="80dp"
         android:layout_marginBottom="24dp"
         android:contentDescription="Blocked Icon"
-        android:src="@android:drawable/ic_secure"
+        android:src="@drawable/ic_shield"
         app:tint="@color/error_red" />
 
     <TextView
@@ -54,3 +55,5 @@
         android:visibility="gone" />
 
 </LinearLayout>
+
+

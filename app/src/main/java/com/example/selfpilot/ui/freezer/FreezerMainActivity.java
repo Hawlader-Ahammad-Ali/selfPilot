@@ -15,6 +15,7 @@ public class FreezerMainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_freezer_main);
+        com.example.selfpilot.util.SystemBarInsets.apply(findViewById(R.id.freezer_main_root));
 
         BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
         bottomNav.getMenu().setGroupCheckable(0, false, true);
@@ -36,3 +37,4 @@ public class FreezerMainActivity extends AppCompatActivity {
         }
     }
 }
+

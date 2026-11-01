@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.LayoutInflater;
@@ -13,14 +14,18 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.example.selfpilot.R;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FrozenAppEntity;
+import com.example.selfpilot.util.FrozenAppsManager;
+import com.example.selfpilot.util.ShizukuUtil;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.util.ArrayList;
@@ -137,12 +142,63 @@ public class FreezerDashboardFragment extends Fragment {
                             } catch (Exception e) {
                                 iconView.setImageResource(android.R.drawable.sym_def_app_icon);
                             }
+                            // Tapping a frozen icon offers the unfreeze action.
+                            iconView.setOnClickListener(v -> showAppActions(app));
                             layoutAppPreview.addView(iconView);
                         }
                     }
                 });
             }
         });
+    }
+
+    /** Tapping a frozen app icon opens its actions, including unfreeze. */
+    private void showAppActions(final FrozenAppEntity app) {
+        if (getContext() == null || app == null) return;
+
+        final String label = (app.appName != null && !app.appName.isEmpty())
+                ? app.appName : app.packageName;
+
+        new AlertDialog.Builder(requireContext())
+                .setTitle(label)
+                .setMessage(app.packageName
+                        + "\n\nThis app is frozen: it cannot be opened until you unfreeze it.")
+                .setPositiveButton("Unfreeze", (dialog, which) -> unfreezeApp(app, label))
+                .setNeutralButton("App info", (dialog, which) -> openAppInfo(app.packageName))
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void unfreezeApp(final FrozenAppEntity app, final String label) {
+        final Context context = requireContext().getApplicationContext();
+        FrozenAppsManager.unfreezeApp(context, app.packageName);
+
+        if (getContext() != null) {
+            Toast.makeText(getContext(), label + " unfrozen", Toast.LENGTH_SHORT).show();
+        }
+
+        // Advanced mode disabled the package at the OS level; re-enable it there too.
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.execute(() -> {
+                try {
+                    if (ShizukuUtil.hasShizukuPermission()) {
+                        ShizukuUtil.unfreezeApp(app.packageName);
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+        }
+
+        updateDashboard();
+    }
+
+    private void openAppInfo(String packageName) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + packageName));
+            startActivity(intent);
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean isAccessibilityServiceEnabled(Context context) {
@@ -172,3 +228,4 @@ public class FreezerDashboardFragment extends Fragment {
         }
     }
 }
+

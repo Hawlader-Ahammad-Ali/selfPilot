@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:background="@color/card_background"
-        android:drawableStart="@android:drawable/ic_menu_search"
+        android:drawableStart="@drawable/ic_search"
         android:drawablePadding="8dp"
         android:hint="Search apps..."
         android:inputType="text"
@@ -61,3 +61,4 @@
         android:paddingBottom="16dp" />
 
 </LinearLayout>
+

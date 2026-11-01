@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/exam_mode_root"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -133,7 +134,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_menu_agenda"
+                            android:src="@drawable/ic_checklist"
                             app:tint="@color/exam_text_secondary" />
                         <EditText
                             android:id="@+id/etExamName"
@@ -170,7 +171,7 @@
                             <ImageView
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
-                                android:src="@android:drawable/ic_menu_today"
+                                android:src="@drawable/ic_calendar"
                                 app:tint="@color/purple_accent_light" />
                             <TextView
                                 android:id="@+id/tvStartDateText"
@@ -184,7 +185,7 @@
                             <ImageView
                                 android:layout_width="16dp"
                                 android:layout_height="16dp"
-                                android:src="@android:drawable/ic_media_play"
+                                android:src="@drawable/ic_chevron_right"
                                 app:tint="@color/exam_text_secondary" />
                         </LinearLayout>
 
@@ -203,7 +204,7 @@
                             <ImageView
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
-                                android:src="@android:drawable/ic_menu_today"
+                                android:src="@drawable/ic_calendar"
                                 app:tint="@color/purple_accent_light" />
                             <TextView
                                 android:id="@+id/tvEndDateText"
@@ -217,7 +218,7 @@
                             <ImageView
                                 android:layout_width="16dp"
                                 android:layout_height="16dp"
-                                android:src="@android:drawable/ic_media_play"
+                                android:src="@drawable/ic_chevron_right"
                                 app:tint="@color/exam_text_secondary" />
                         </LinearLayout>
                     </LinearLayout>
@@ -232,7 +233,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@android:drawable/ic_menu_mylocation"
+                            android:src="@drawable/ic_target"
                             app:tint="@color/exam_text_secondary" />
                         <TextView
                             android:layout_width="wrap_content"
@@ -266,7 +267,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@android:drawable/ic_delete"
+                            android:src="@drawable/ic_delete"
                             app:tint="@color/exam_text_secondary" />
                         <TextView
                             android:layout_width="wrap_content"
@@ -290,7 +291,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_dialog_dialer"
+                            android:src="@drawable/ic_lock"
                             app:tint="@color/purple_accent_light" />
                         <TextView
                             android:layout_width="0dp"
@@ -311,7 +312,7 @@
                         <ImageView
                             android:layout_width="16dp"
                             android:layout_height="16dp"
-                            android:src="@android:drawable/ic_media_play"
+                            android:src="@drawable/ic_chevron_right"
                             app:tint="@color/exam_text_secondary" />
                     </LinearLayout>
 
@@ -325,7 +326,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@android:drawable/ic_secure"
+                            android:src="@drawable/ic_shield"
                             app:tint="@color/exam_text_secondary" />
                         <TextView
                             android:layout_width="wrap_content"
@@ -349,7 +350,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_dialog_dialer"
+                            android:src="@drawable/ic_lock"
                             app:tint="@color/purple_accent_light" />
                         <TextView
                             android:layout_width="0dp"
@@ -370,7 +371,7 @@
                         <ImageView
                             android:layout_width="16dp"
                             android:layout_height="16dp"
-                            android:src="@android:drawable/ic_media_play"
+                            android:src="@drawable/ic_chevron_right"
                             app:tint="@color/exam_text_secondary" />
                     </LinearLayout>
 
@@ -389,7 +390,7 @@
                         <ImageView
                             android:layout_width="20dp"
                             android:layout_height="20dp"
-                            android:src="@android:drawable/ic_menu_today"
+                            android:src="@drawable/ic_calendar"
                             app:tint="@color/white" />
 
                         <TextView
@@ -442,7 +443,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/ic_menu_call"
+                            android:src="@drawable/ic_call"
                             app:tint="@color/exam_text_secondary" />
 
                         <TextView
@@ -472,7 +473,7 @@
                         <ImageView
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:src="@android:drawable/stat_notify_chat"
+                            android:src="@drawable/ic_message"
                             app:tint="@color/exam_text_secondary" />
 
                         <TextView
@@ -509,3 +510,5 @@
         app:menu="@menu/bottom_nav_menu" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
+
+

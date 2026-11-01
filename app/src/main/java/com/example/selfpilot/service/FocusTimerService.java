@@ -29,6 +29,8 @@ public class FocusTimerService extends Service {
     public static final String ACTION_RECOVER = "ACTION_RECOVER";
 
     public static final String EXTRA_DURATION = "EXTRA_DURATION";
+    /** Exact duration in seconds (HH:MM:SS custom input). Takes priority over EXTRA_DURATION. */
+    public static final String EXTRA_DURATION_SECONDS = "EXTRA_DURATION_SECONDS";
 
     public static final String ACTION_TIMER_TICK = "com.example.selfpilot.TIMER_TICK";
     public static final String ACTION_TIMER_FINISHED = "com.example.selfpilot.TIMER_FINISHED";
@@ -76,8 +78,11 @@ public class FocusTimerService extends Service {
         String action = intent != null ? intent.getAction() : null;
 
         if (ACTION_START.equals(action)) {
-            long durationMins = intent.getIntExtra(EXTRA_DURATION, 25);
-            startNewSession(durationMins);
+            long seconds = intent.getLongExtra(EXTRA_DURATION_SECONDS, -1L);
+            if (seconds <= 0) {
+                seconds = Math.max(1, intent.getIntExtra(EXTRA_DURATION, 25)) * 60L;
+            }
+            startNewSession(seconds);
         } else {
             // ACTION_RECOVER, ACTION_QUERY_STATUS, or null after a system restart.
             recoverSession();
@@ -90,7 +95,7 @@ public class FocusTimerService extends Service {
     // Session handling
     // ------------------------------------------------------------------------------------
 
-    private void startNewSession(final long durationMins) {
+    private void startNewSession(final long durationSeconds) {
         new Thread(() -> {
             try {
                 AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
@@ -110,11 +115,14 @@ public class FocusTimerService extends Service {
                 }
 
                 long now = System.currentTimeMillis();
-                long endTime = now + (durationMins * 60 * 1000L);
-                FocusSessionEntity session = new FocusSessionEntity(now, endTime, (int) durationMins);
+                long durationMillis = Math.max(1000L, durationSeconds * 1000L);
+                long endTime = now + durationMillis;
+                // Sub-minute sessions still count as one minute of productive time.
+                int storedMinutes = (int) Math.max(1L, Math.round(durationSeconds / 60.0));
+                FocusSessionEntity session = new FocusSessionEntity(now, endTime, storedMinutes);
                 activeSessionId = (int) db.focusSessionDao().insert(session);
 
-                beginCountdown(durationMins * 60 * 1000L);
+                beginCountdown(durationMillis);
             } catch (Exception e) {
                 Log.e(TAG, "[FOCUS] failed to start session", e);
                 stopEverything();
