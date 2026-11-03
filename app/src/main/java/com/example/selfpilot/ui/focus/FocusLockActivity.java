@@ -31,6 +31,7 @@ import java.util.Locale;
 public class FocusLockActivity extends AppCompatActivity {
 
     private static final String TAG = "SELF_PILOT_FOCUS";
+    private static final long BARS_GUARD_MS = 400L;
     private static final long TICK_MS = 250L;
 
     public static volatile boolean VISIBLE = false;
@@ -90,12 +91,26 @@ public class FocusLockActivity extends AppCompatActivity {
         loadSession();
     }
 
+    /**
+     * System bars can still be revealed by an edge swipe. This guard hides them again right
+     * after, so the status bar / navigation bar never stays on screen during a session.
+     */
+    private final Runnable barsGuard = new Runnable() {
+        @Override
+        public void run() {
+            hideSystemBars();
+            handler.postDelayed(this, BARS_GUARD_MS);
+        }
+    };
+
     @Override
     protected void onStart() {
         super.onStart();
         VISIBLE = true;
         handler.removeCallbacks(tick);
         handler.post(tick);
+        handler.removeCallbacks(barsGuard);
+        handler.post(barsGuard);
     }
 
     @Override
@@ -103,6 +118,7 @@ public class FocusLockActivity extends AppCompatActivity {
         super.onStop();
         VISIBLE = false;
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(barsGuard);
     }
 
     @Override
@@ -183,4 +199,6 @@ public class FocusLockActivity extends AppCompatActivity {
         return String.format(Locale.US, "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60);
     }
 }
+
+
 

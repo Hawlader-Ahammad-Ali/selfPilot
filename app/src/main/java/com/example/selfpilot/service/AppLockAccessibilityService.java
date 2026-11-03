@@ -15,6 +15,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
 import com.example.selfpilot.ui.block.BlockActivity;
+import com.example.selfpilot.ui.focus.FocusLockActivity;
 import com.example.selfpilot.util.EmergencyUnlockManager;
 import com.example.selfpilot.util.ExamSessionManager;
 import com.example.selfpilot.util.FocusSessionManager;
@@ -181,6 +182,12 @@ public class AppLockAccessibilityService extends AccessibilityService {
 
         FrozenAppsManager.ensureInitialized(this);
         reconcileCacheIfDue();
+
+        // Focus Mode: a pull-down must not reveal the shade. Immersive mode alone is not
+        // enough on several OEM skins, so the shade is collapsed the moment it appears.
+        if (FocusSessionManager.isFocusActive() && closeNotificationShadeIfNeeded(event)) {
+            return;
+        }
 
         // Fast path: the event itself names a frozen package.
         CharSequence pkgSeq = event.getPackageName();
@@ -413,18 +420,48 @@ public class AppLockAccessibilityService extends AccessibilityService {
     }
 
     /**
+     * Collapses the notification shade while a focus session runs.
+     *
+     * @return true when the event was the shade and has been dismissed.
+     */
+    private boolean closeNotificationShadeIfNeeded(AccessibilityEvent event) {
+        CharSequence eventPackage = event.getPackageName();
+        if (eventPackage == null || !"com.android.systemui".equals(eventPackage.toString())) {
+            return false;
+        }
+
+        CharSequence classSeq = event.getClassName();
+        String className = classSeq == null ? "" : classSeq.toString();
+        boolean isShade = className.contains("NotificationShade")
+                || className.contains("NotificationPanel")
+                || className.contains("Shade")
+                || className.contains("StatusBar");
+
+        if (!isShade) return false;
+
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        Log.i(TAG, "[FOCUS] Notification shade collapsed (" + className + ")");
+        if (FocusLockActivity.VISIBLE) {
+            return true;
+        }
+        // The shade stole focus from the countdown: bring it back as well.
+        bringFocusLockToFront();
+        return true;
+    }
+
+    /**
      * Puts the focus countdown back in front after Home, Recents or another app stole the
      * foreground. Debounced so a single press cannot start the screen repeatedly.
      */
     private void bringFocusLockToFront() {
-        if (com.example.selfpilot.ui.focus.FocusLockActivity.VISIBLE) return;
+        if (FocusLockActivity.VISIBLE) return;
 
         long now = SystemClock.elapsedRealtime();
         if (now - lastFocusLockPushAt < FOCUS_LOCK_PUSH_DEBOUNCE_MS) return;
         lastFocusLockPushAt = now;
 
         Log.i(TAG, "[FOCUS] Countdown not in front - restoring focus screen");
-        com.example.selfpilot.ui.focus.FocusLockActivity.start(this);
+        FocusLockActivity.start(this);
     }
 
     private void dismissStaleOverlay(String foreground) {
@@ -702,6 +739,9 @@ public class AppLockAccessibilityService extends AccessibilityService {
         }
     }
 }
+
+
+
 
 
 

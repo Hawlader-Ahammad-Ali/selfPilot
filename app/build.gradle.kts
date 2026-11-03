@@ -18,6 +18,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // v1 (JAR) signature is required by Android 6 and by several OEM package
+        // installers; v2/v3 keep modern devices happy. Without v1 the installer reports
+        // "package appears to be invalid" instead of a real error.
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
     buildTypes {
         release {
             optimization {
@@ -64,3 +75,4 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
 }
+
