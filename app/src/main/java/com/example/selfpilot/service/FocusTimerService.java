@@ -179,6 +179,9 @@ public class FocusTimerService extends Service {
         isRunning = true;
         running = true;
 
+        // Optional live channel: no-op for guests, never affects the countdown.
+        try { com.example.selfpilot.account.SessionSyncManager.publish(this); } catch (Exception ignored) {}
+
         countDownTimer = new CountDownTimer(timeLeftInMillis, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
@@ -223,6 +226,7 @@ public class FocusTimerService extends Service {
 
     private void stopEverything() {
         running = false;
+        try { com.example.selfpilot.account.SessionSyncManager.publish(this); } catch (Exception ignored) {}
         isRunning = false;
         mainHandler.post(() -> {
             try {

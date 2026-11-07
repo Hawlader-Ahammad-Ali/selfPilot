@@ -26,4 +26,16 @@ public interface HonorScoreDao {
     /** Used by the analytics screen for the "Honor Score (Avg)" card. */
     @Query("SELECT COALESCE(AVG(disciplineScore), 0) FROM honor_score WHERE date >= :startMillis")
     float getAverageDisciplineScoreSince(long startMillis);
+
+    // --- Cloud backup / leaderboard -----------------------------------------------------
+
+    /** Newest-first page used when exporting a backup. */
+    @Query("SELECT * FROM honor_score ORDER BY date DESC LIMIT :limit")
+    List<HonorScoreEntity> getScoresLimited(int limit);
+
+    @Query("SELECT COALESCE(SUM(studyPoints), 0) FROM honor_score")
+    int getTotalStudyPoints();
+
+    @Query("SELECT * FROM honor_score ORDER BY date DESC LIMIT 1")
+    HonorScoreEntity getLatestScore();
 }

@@ -26,6 +26,7 @@ import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.data.HonorScoreDao;
 import com.example.selfpilot.data.HonorScoreEntity;
 import com.example.selfpilot.data.RestrictionRuleEntity;
+import com.example.selfpilot.ui.account.AccountActivity;
 import com.example.selfpilot.ui.exam.ExamModeActivity;
 import com.example.selfpilot.ui.freezer.FreezerMainActivity;
 import com.example.selfpilot.util.ScoreCalculator;
@@ -99,7 +100,9 @@ public class HomeFragment extends Fragment {
         btnShortcutFocus.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_focus));
         btnShortcutAnalytics.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_analytics));
         btnShortcutSettings.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_settings));
-        btnShortcutSettingsTop.setOnClickListener(v -> bottomNav.setSelectedItemId(R.id.navigation_settings));
+
+        // Header avatar / account entry: login is optional, every feature works as a guest.
+        btnShortcutSettingsTop.setOnClickListener(v -> AccountActivity.start(requireContext()));
         
         btnShortcutFreezer.setOnClickListener(v -> {
             Intent intent = new Intent(getContext(), FreezerMainActivity.class);

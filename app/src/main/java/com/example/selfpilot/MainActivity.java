@@ -73,6 +73,20 @@ public class MainActivity extends AppCompatActivity {
         if (running && !FocusLockActivity.VISIBLE) {
             FocusLockActivity.start(this);
         }
+
+        // Optional cloud layer. Everything below is a no-op for guests and every failure is
+        // contained, so local features never depend on it.
+        com.example.selfpilot.account.CloudBackupWorker.schedule(this);
+        com.example.selfpilot.account.CloudSyncManager.syncIfDue(this, 15 * 60 * 1000L);
+        com.example.selfpilot.account.SessionSyncManager.startListening(this);
+        com.example.selfpilot.account.SessionSyncManager.publish(this);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // The live channel only runs while a screen is visible.
+        com.example.selfpilot.account.SessionSyncManager.stopListening();
     }
 
     /**

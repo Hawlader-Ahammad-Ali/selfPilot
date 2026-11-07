@@ -314,6 +314,7 @@ public class FocusFragment extends Fragment {
         }
 
         isTimerRunning = true;
+        try { com.example.selfpilot.account.SessionSyncManager.publish(requireContext()); } catch (Exception ignored) {}
         updateButtonsState();
         updateTimerUI(seconds * 1000L);
 
