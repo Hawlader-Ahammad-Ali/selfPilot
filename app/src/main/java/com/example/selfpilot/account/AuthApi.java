@@ -250,6 +250,15 @@ public class AuthApi {
             return "Email sign-in is disabled for this project";
         }
         if (code.contains("CONFIGURATION_NOT_FOUND")) return "Auth is not configured in the cloud";
+        if (code.contains("INVALID_IDP_RESPONSE")) {
+            return "Google rejected this install - the app signature is not registered";
+        }
+        if (code.contains("FEDERATED_USER_ID_ALREADY_LINKED")) {
+            return "This Google account is already linked";
+        }
+        if (code.contains("API_KEY_INVALID") || code.contains("API key not valid")) {
+            return "Cloud API key rejected - contact support";
+        }
         if (code.isEmpty()) return "Network unavailable - try again";
         return "Sign-in failed: " + code;
     }

@@ -116,6 +116,15 @@ public class AccountActivity extends AppCompatActivity {
         refreshUi();
     }
 
+    /** Play services sign-in fallback returns here. */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == GoogleSignInClient.RC_SIGN_IN) {
+            GoogleSignInClient.handleSignInResult(data);
+        }
+    }
+
     private void bindViews() {
         tvAvatar = findViewById(R.id.tvAccountAvatar);
         tvName = findViewById(R.id.tvAccountName);
