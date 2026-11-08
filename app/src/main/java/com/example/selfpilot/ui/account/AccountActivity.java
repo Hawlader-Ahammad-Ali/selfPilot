@@ -188,7 +188,13 @@ public class AccountActivity extends AppCompatActivity {
         switchAutoBackup.setChecked(PrivacySettings.autoBackup(this));
         switchRealtime.setChecked(PrivacySettings.realtimeSync(this));
         tvLeaderboardMode.setText(leaderboardModeLabel(PrivacySettings.leaderboardMode(this)));
-        tvSyncStatus.setText(CloudSyncManager.statusLine(this));
+        String status = CloudSyncManager.statusLine(this);
+        String lastError = AuthApi.lastError(this);
+        if (lastError != null && lastError.length() > 0) {
+            // Never let a sign-in failure disappear silently - this line is what to report.
+            status = status + "\nLast sign-in: " + lastError;
+        }
+        tvSyncStatus.setText(status);
 
         loadStats();
         loadLeaderboard();

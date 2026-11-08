@@ -67,6 +67,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.analytics.ScreenTimeActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.account.AccountActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />

@@ -43,6 +43,7 @@ public class AuthApi {
 
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static volatile Context lastContext;
 
     private AuthApi() {
     }
@@ -53,14 +54,44 @@ public class AuthApi {
 
     public static void signIn(Context context, String email, String password, Callback callback) {
         run(context, callback, () -> {
-            FirebaseAuth auth = FirebaseBoot.auth(context);
-            if (auth == null) return Fail.of("Authentication is unavailable on this device");
-
-            AuthResult result = Tasks.await(
-                    auth.signInWithEmailAndPassword(email, password),
-                    TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return Ok.of(saveSession(context, result.getUser(), "password"));
+            try {
+                FirebaseAuth auth = FirebaseBoot.auth(context);
+                if (auth != null) {
+                    AuthResult result = Tasks.await(
+                            auth.signInWithEmailAndPassword(email, password),
+                            TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    return Ok.of(saveSession(context, result.getUser(), "password"));
+                }
+                note("SDK auth unavailable, using REST");
+            } catch (Exception sdkError) {
+                note("SDK email sign-in failed: " + rootCause(sdkError));
+            }
+            // Second, independent path: the Identity Toolkit REST endpoint.
+            return restSignIn(context, email, password);
         });
+    }
+
+    /** Email sign-in through the REST API - used when the SDK path fails. */
+    private static Result restSignIn(Context context, String email, String password) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("email", email);
+            body.put("password", password);
+            body.put("returnSecureToken", true);
+
+            Http.Response response = Http.post(
+                    CloudConfig.AUTH_BASE + "signInWithPassword?key=" + CloudConfig.API_KEY,
+                    body.toString());
+            if (!response.isOk()) {
+                String message = restMessage(response.body);
+                note("REST email sign-in: " + message);
+                return Fail.of(message);
+            }
+            return Ok.of(sessionFromRest(context, response.body, "password"));
+        } catch (Exception e) {
+            note("REST email sign-in threw: " + rootCause(e));
+            return Fail.of("Network unavailable - check your connection");
+        }
     }
 
     public static void signUp(Context context, String email, String password,
@@ -103,19 +134,48 @@ public class AuthApi {
 
     public static void signInWithGoogle(Context context, String googleIdToken, Callback callback) {
         run(context, callback, () -> {
-            FirebaseAuth auth = FirebaseBoot.auth(context);
-            if (auth == null) return Fail.of("Authentication is unavailable on this device");
             if (googleIdToken == null || googleIdToken.isEmpty()) {
                 return Fail.of("Google did not return an ID token");
             }
 
-            AuthCredential credential = GoogleAuthProvider.getCredential(googleIdToken, null);
-            AuthResult result = Tasks.await(auth.signInWithCredential(credential),
-                    TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-            FirebaseUser user = result.getUser();
-            return Ok.of(saveSession(context, user, "google.com"));
+            try {
+                FirebaseAuth auth = FirebaseBoot.auth(context);
+                if (auth != null) {
+                    AuthCredential credential = GoogleAuthProvider.getCredential(googleIdToken, null);
+                    AuthResult result = Tasks.await(auth.signInWithCredential(credential),
+                            TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    return Ok.of(saveSession(context, result.getUser(), "google.com"));
+                }
+                note("SDK auth unavailable, using REST");
+            } catch (Exception sdkError) {
+                note("SDK Google sign-in failed: " + rootCause(sdkError));
+            }
+            return restGoogle(context, googleIdToken);
         });
+    }
+
+    /** Google sign-in through the REST API - the second, independent path. */
+    private static Result restGoogle(Context context, String googleIdToken) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("postBody", "id_token=" + googleIdToken + "&providerId=google.com");
+            body.put("requestUri", "http://localhost");
+            body.put("returnSecureToken", true);
+            body.put("returnIdpCredential", true);
+
+            Http.Response response = Http.post(
+                    CloudConfig.AUTH_BASE + "signInWithIdp?key=" + CloudConfig.API_KEY,
+                    body.toString());
+            if (!response.isOk()) {
+                String message = restMessage(response.body);
+                note("REST Google sign-in: " + message);
+                return Fail.of(message);
+            }
+            return Ok.of(sessionFromRest(context, response.body, "google.com"));
+        } catch (Exception e) {
+            note("REST Google sign-in threw: " + rootCause(e));
+            return Fail.of("Network unavailable - check your connection");
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -210,6 +270,105 @@ public class AuthApi {
     // ------------------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------------------
+
+    /** Builds and persists a session from an Identity Toolkit REST response. */
+    private static AccountSession sessionFromRest(Context context, String json, String provider)
+            throws Exception {
+        JSONObject o = new JSONObject(json);
+        AccountSession session = AccountSession.load(context);
+        session.uid = o.optString("localId", null);
+        session.email = o.optString("email", null);
+        session.idToken = o.optString("idToken", null);
+        session.refreshToken = o.optString("refreshToken", null);
+
+        String name = o.optString("displayName", null);
+        if (name == null || name.trim().isEmpty()) {
+            String email = session.email == null ? "" : session.email;
+            name = email.contains("@") ? email.substring(0, email.indexOf('@')) : null;
+        }
+        session.displayName = name;
+        session.provider = provider;
+
+        long expiresIn = 3600L;
+        try {
+            expiresIn = Long.parseLong(o.optString("expiresIn", "3600"));
+        } catch (Exception ignored) {
+        }
+        session.expiresAt = System.currentTimeMillis() + expiresIn * 1000L;
+
+        if (session.uid == null || session.idToken == null) {
+            throw new Exception("Incomplete session response");
+        }
+        session.save(context);
+        return session;
+    }
+
+    private static String restMessage(String body) {
+        try {
+            JSONObject error = new JSONObject(body).optJSONObject("error");
+            if (error != null) return describeCode(error.optString("message", "Sign-in failed"));
+        } catch (Exception ignored) {
+        }
+        return "Sign-in failed";
+    }
+
+    private static String describeCode(String code) {
+        if (code == null) return "Sign-in failed";
+        if (code.contains("INVALID_LOGIN_CREDENTIALS") || code.contains("INVALID_PASSWORD")
+                || code.contains("EMAIL_NOT_FOUND")) {
+            return "Wrong email or password";
+        }
+        if (code.contains("EMAIL_EXISTS")) return "This email is already registered";
+        if (code.contains("WEAK_PASSWORD")) return "Password must be at least 6 characters";
+        if (code.contains("INVALID_EMAIL")) return "Enter a valid email address";
+        if (code.contains("OPERATION_NOT_ALLOWED")) return "This sign-in method is disabled for the project";
+        if (code.contains("TOO_MANY_ATTEMPTS")) return "Too many attempts - try again later";
+        if (code.contains("INVALID_IDP_RESPONSE")) return "Google rejected this install - signature not registered";
+        return "Sign-in failed (" + code + ")";
+    }
+
+    private static String rootCause(Throwable t) {
+        if (t == null) return "unknown";
+        Throwable cause = t;
+        int guard = 0;
+        while (cause.getCause() != null && guard++ < 5) cause = cause.getCause();
+        String message = cause.getMessage();
+        return cause.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Diagnostics - surfaced on the account screen so a failure is never silent
+    // ------------------------------------------------------------------------------------
+
+    private static final String DIAG_PREFS = "SelfPilotAuthDiag";
+    private static final String KEY_LAST_ERROR = "last_error";
+
+    private static void note(String message) {
+        try {
+            Context ctx = lastContext;
+            if (ctx == null) return;
+            android.content.SharedPreferences prefs =
+                    ctx.getSharedPreferences(DIAG_PREFS, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putString(KEY_LAST_ERROR, new java.text.SimpleDateFormat(
+                            "HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+                            + " " + message)
+                    .apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Last recorded auth problem for this install, or null when nothing failed. */
+    public static String lastError(Context context) {
+        if (context == null) return null;
+        try {
+            return context.getApplicationContext()
+                    .getSharedPreferences(DIAG_PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_LAST_ERROR, null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     private static AccountSession saveSession(Context context, FirebaseUser user,
                                               String provider) {
@@ -307,6 +466,7 @@ public class AuthApi {
 
     private static void run(Context context, Callback callback, Task task) {
         final Context app = context == null ? null : context.getApplicationContext();
+        if (app != null) lastContext = app;
         if (app == null) {
             MAIN.post(() -> {
                 if (callback != null) callback.onDone(false, "Authentication unavailable");

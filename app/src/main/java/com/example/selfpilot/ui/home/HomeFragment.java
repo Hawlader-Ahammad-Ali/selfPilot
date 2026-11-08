@@ -70,6 +70,13 @@ public class HomeFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
         tvTotalScreenTime = view.findViewById(R.id.tvTotalScreenTime);
+
+        // Tapping the screen-time card opens the hour-by-hour breakdown.
+        View cardScreenTime = view.findViewById(R.id.cardTotalScreenTime);
+        if (cardScreenTime != null) {
+            cardScreenTime.setOnClickListener(v ->
+                    com.example.selfpilot.ui.analytics.ScreenTimeActivity.start(requireContext()));
+        }
         progressScreenTimeBudget = view.findViewById(R.id.progressScreenTimeBudget);
         tvScreenTimeBudget = view.findViewById(R.id.tvScreenTimeBudget);
         tvStudyTimeHome = view.findViewById(R.id.tvStudyTimeHome);
