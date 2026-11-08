@@ -1,14 +1,21 @@
 package com.example.selfpilot.util;
 
 import android.app.AppOpsManager;
+import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.LauncherActivityInfo;
+import android.content.pm.LauncherApps;
+import android.content.pm.ResolveInfo;
+import android.graphics.drawable.Drawable;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Process;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,45 +35,242 @@ public class UsageUtil {
         return mode == AppOpsManager.MODE_ALLOWED;
     }
 
+    /**
+     * Per-package usage for the given window.
+     *
+     * queryUsageStats() returns one bucket per package per calendar interval. The previous code
+     * merged those buckets with UsageStats.add(), which sums totalTimeInForeground - so a
+     * window that touches two buckets counted the same minutes twice and the reported screen
+     * time drifted far above the device's own figure. queryAndAggregateUsageStats() lets the
+     * system aggregate, so every package is counted once.
+     */
     public static Map<String, UsageStats> getUsageStats(Context context, long startTime, long endTime) {
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) {
-            return null;
-        }
-        
-        // Use INTERVAL_DAILY for better historical data retrieval
-        List<UsageStats> queryUsageStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-        if (queryUsageStats == null || queryUsageStats.isEmpty()) {
-            return null;
-        }
-        
-        Map<String, UsageStats> aggregatedStats = new java.util.HashMap<>();
-        for (UsageStats stats : queryUsageStats) {
-            String packageName = stats.getPackageName();
-            if (aggregatedStats.containsKey(packageName)) {
-                UsageStats existing = aggregatedStats.get(packageName);
-                existing.add(stats);
-            } else {
-                aggregatedStats.put(packageName, stats);
+        if (usm == null) return null;
+
+        try {
+            Map<String, UsageStats> aggregated = usm.queryAndAggregateUsageStats(startTime, endTime);
+            if (aggregated != null) {
+                // Never hand out buckets that ended before the window started.
+                for (java.util.Iterator<Map.Entry<String, UsageStats>> it =
+                     aggregated.entrySet().iterator(); it.hasNext(); ) {
+                    Map.Entry<String, UsageStats> entry = it.next();
+                    UsageStats stats = entry.getValue();
+                    if (stats == null) {
+                        it.remove();
+                        continue;
+                    }
+                    if (stats.getLastTimeUsed() < startTime
+                            && stats.getTotalTimeInForeground() <= 0) {
+                        it.remove();
+                    }
+                }
+                return aggregated;
             }
+        } catch (Throwable ignored) {
         }
-        return aggregatedStats;
+
+        // Fallback for ROMs that fail the aggregate call: keep the system buckets as-is
+        // instead of adding them together.
+        try {
+            List<UsageStats> buckets =
+                    usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+            if (buckets == null || buckets.isEmpty()) return null;
+
+            Map<String, UsageStats> byPackage = new java.util.HashMap<>();
+            for (UsageStats stats : buckets) {
+                if (stats == null) continue;
+                UsageStats existing = byPackage.get(stats.getPackageName());
+                // Keep the bucket that actually overlaps the requested window.
+                if (existing == null || stats.getLastTimeUsed() > existing.getLastTimeUsed()) {
+                    byPackage.put(stats.getPackageName(), stats);
+                }
+            }
+            return byPackage;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
-    public static List<ApplicationInfo> getInstalledApps(Context context) {
-        PackageManager pm = context.getPackageManager();
-        List<ApplicationInfo> installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
-        List<ApplicationInfo> userApps = new ArrayList<>();
+    /**
+     * Real screen-on time for the window, measured from the device's own
+     * SCREEN_INTERACTIVE / SCREEN_NON_INTERACTIVE events (and keyguard events).
+     *
+     * This is the number that should match what the phone reports: summing per-app foreground
+     * time double counts overlapping windows (split screen, picture-in-picture) and includes
+     * the launcher and system UI, which is why the total used to drift upwards.
+     *
+     * The state at {@code start} is recovered from a bounded look-back, so a phone that was
+     * already unlocked at midnight is not under-counted and a phone that was off is not
+     * over-counted.
+     */
+    public static long getScreenOnMillis(Context context, long start, long end) {
+        if (context == null || end <= start) return 0L;
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return 0L;
 
-        for (ApplicationInfo appInfo : installedApps) {
-            // Filter out system apps and updated system apps
-            boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            boolean isUpdatedSystemApp = (appInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+        long total = 0L;
+        long onSince = -1L;
 
-            if (!isSystemApp && !isUpdatedSystemApp) {
-                userApps.add(appInfo);
+        // 1. Was the screen already interactive when the window opened?
+        try {
+            long probeFrom = start - 2 * 60 * 60 * 1000L;
+            if (probeFrom < 0) probeFrom = 0;
+            UsageEvents probe = usm.queryEvents(probeFrom, start);
+            UsageEvents.Event event = new UsageEvents.Event();
+            boolean interactive = false;
+            while (probe != null && probe.hasNextEvent()) {
+                probe.getNextEvent(event);
+                int type = event.getEventType();
+                if (type == UsageEvents.Event.SCREEN_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_HIDDEN) {
+                    interactive = true;
+                } else if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                    interactive = false;
+                }
             }
+            if (interactive) onSince = start;
+        } catch (Throwable ignored) {
         }
-        return userApps;
+
+        // 2. Walk the window's events and close each on/off segment.
+        try {
+            UsageEvents events = usm.queryEvents(start, end);
+            UsageEvents.Event event = new UsageEvents.Event();
+            while (events != null && events.hasNextEvent()) {
+                events.getNextEvent(event);
+                int type = event.getEventType();
+                long ts = Math.min(event.getTimeStamp(), end);
+
+                if (type == UsageEvents.Event.SCREEN_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_HIDDEN) {
+                    if (onSince < 0) onSince = Math.max(ts, start);
+                } else if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                    if (onSince >= 0) {
+                        total += Math.max(0L, ts - onSince);
+                        onSince = -1L;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            return Math.max(0L, total);
+        }
+
+        if (onSince >= 0) total += Math.max(0L, end - onSince);
+        return Math.min(total, Math.max(0L, end - start));
+    }
+
+    /**
+     * Every launchable user app, merged from two sources.
+     *
+     * On several OEM ROMs getInstalledApplications() comes back empty or partial even with
+     * QUERY_ALL_PACKAGES granted, so the launcher query is used as a supplement - that is also
+     * the list the user actually recognises. Each entry is guarded individually: one package
+     * with broken resources must never abort the whole list.
+     */
+    public static List<ApplicationInfo> getInstalledApps(Context context) {
+        if (context == null) return new ArrayList<>();
+        PackageManager pm = context.getPackageManager();
+
+        Map<String, ApplicationInfo> byPackage = new LinkedHashMap<>();
+
+        try {
+            List<ApplicationInfo> all = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+            if (all != null) {
+                for (ApplicationInfo info : all) {
+                    try {
+                        if (info == null || info.packageName == null) continue;
+                        if (isSystem(info)) continue;
+                        byPackage.put(info.packageName, info);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // Fall through to the launcher query below.
+        }
+
+        try {
+            Intent launcher = new Intent(Intent.ACTION_MAIN);
+            launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> resolvers = pm.queryIntentActivities(launcher, 0);
+            if (resolvers != null) {
+                for (ResolveInfo resolver : resolvers) {
+                    try {
+                        if (resolver == null || resolver.activityInfo == null) continue;
+                        ApplicationInfo info = resolver.activityInfo.applicationInfo;
+                        if (info == null || info.packageName == null) continue;
+                        if (isSystem(info)) continue;
+                        if (!byPackage.containsKey(info.packageName)) {
+                            byPackage.put(info.packageName, info);
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        // Third source: the launcher service. A few OEM ROMs narrow package visibility even
+        // for queryIntentActivities, but still hand the launcher list to this API.
+        try {
+            LauncherApps launcherApps =
+                    (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+            if (launcherApps != null) {
+                List<LauncherActivityInfo> activities =
+                        launcherApps.getActivityList(null, Process.myUserHandle());
+                if (activities != null) {
+                    for (LauncherActivityInfo activity : activities) {
+                        try {
+                            ApplicationInfo info = activity.getApplicationInfo();
+                            if (info == null || info.packageName == null) continue;
+                            if (isSystem(info)) continue;
+                            if (!byPackage.containsKey(info.packageName)) {
+                                byPackage.put(info.packageName, info);
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return new ArrayList<>(byPackage.values());
+    }
+
+    private static boolean isSystem(ApplicationInfo info) {
+        return (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0
+                || (info.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+    }
+
+    /**
+     * PackageManager.loadLabel() throws Resources.NotFoundException for a handful of OEM /
+     * sideloaded packages. That single failure used to kill the whole app-list loader, which is
+     * why the list looked permanently empty on those phones.
+     */
+    public static String safeLabel(PackageManager pm, ApplicationInfo info) {
+        if (info == null) return "";
+        try {
+            CharSequence label = info.loadLabel(pm);
+            if (label != null && label.length() > 0) return label.toString().trim();
+        } catch (Throwable ignored) {
+        }
+        try {
+            String pkg = info.packageName;
+            return pkg == null ? "" : pkg;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    public static Drawable safeIcon(PackageManager pm, String packageName) {
+        try {
+            return pm.getApplicationIcon(packageName);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 }

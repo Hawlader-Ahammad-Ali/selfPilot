@@ -269,7 +269,7 @@ public class ExamModeActivity extends AppCompatActivity {
             for (ApplicationInfo appInfo : installedApps) {
                 if (appInfo.packageName.equals(ownPackage)) continue;
 
-                String name = appInfo.loadLabel(pm).toString();
+                String name = UsageUtil.safeLabel(pm, appInfo);
                 Drawable icon = null;
                 try {
                     icon = pm.getApplicationIcon(appInfo.packageName);

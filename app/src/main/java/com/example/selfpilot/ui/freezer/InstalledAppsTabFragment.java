@@ -1,10 +1,12 @@
 package com.example.selfpilot.ui.freezer;
 
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.Editable;
+import android.util.Log;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -113,44 +115,68 @@ public class InstalledAppsTabFragment extends Fragment {
     }
 
     private void loadApps() {
+        if (pbLoadingInstalled == null || rvInstalledApps == null) return;
         pbLoadingInstalled.setVisibility(View.VISIBLE);
         rvInstalledApps.setVisibility(View.GONE);
 
+        final Context appContext = requireContext().getApplicationContext();
+
         executorService.execute(() -> {
-            PackageManager pm = requireContext().getPackageManager();
-            List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(requireContext());
-            String ownPackage = requireContext().getPackageName();
-            
-            // Query currently frozen to exclude from installed tab
-            List<FrozenAppEntity> frozenEntities = db.frozenAppDao().getFrozenApps();
-            List<String> frozenPackageNames = new ArrayList<>();
-            if (frozenEntities != null) {
-                for (FrozenAppEntity f : frozenEntities) {
-                    frozenPackageNames.add(f.packageName);
-                }
-            }
+            final List<AppItem> items = new ArrayList<>();
+            String problem = null;
 
-            List<AppItem> items = new ArrayList<>();
-            for (ApplicationInfo app : installedApps) {
-                if (app.packageName.equals(ownPackage)) continue;
-                if (frozenPackageNames.contains(app.packageName)) continue; // Already frozen
+            try {
+                PackageManager pm = appContext.getPackageManager();
+                List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(appContext);
+                Log.i("SELF_PILOT_FREEZER", "[APPS] installed=" + installedApps.size());
 
-                String name = app.loadLabel(pm).toString();
-                Drawable icon = null;
+                String ownPackage = appContext.getPackageName();
+
+                // Query currently frozen to exclude from installed tab
+                List<String> frozenPackageNames = new ArrayList<>();
                 try {
-                    icon = pm.getApplicationIcon(app.packageName);
-                } catch (Exception ignored) {}
+                    List<FrozenAppEntity> frozenEntities = db.frozenAppDao().getFrozenApps();
+                    if (frozenEntities != null) {
+                        for (FrozenAppEntity f : frozenEntities) {
+                            if (f != null && f.packageName != null) frozenPackageNames.add(f.packageName);
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
 
-                items.add(new AppItem(app.packageName, name, icon));
+                for (ApplicationInfo app : installedApps) {
+                    if (app == null || app.packageName == null) continue;
+                    if (app.packageName.equals(ownPackage)) continue;
+                    if (frozenPackageNames.contains(app.packageName)) continue; // Already frozen
+
+                    // Some OEM packages ship broken resources: skip just that entry, not the list.
+                    try {
+                        String name = UsageUtil.safeLabel(pm, app);
+                        Drawable icon = UsageUtil.safeIcon(pm, app.packageName);
+                        items.add(new AppItem(app.packageName, name, icon));
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable t) {
+                Log.w("SELF_PILOT_FREEZER", "[APPS] failed to load installed apps", t);
+                problem = t.getClass().getSimpleName();
             }
 
-            if (getActivity() != null) {
-                getActivity().runOnUiThread(() -> {
-                    pbLoadingInstalled.setVisibility(View.GONE);
-                    rvInstalledApps.setVisibility(View.VISIBLE);
-                    adapter.setItems(items);
-                });
-            }
+            if (getActivity() == null) return;
+            final String failure = problem;
+            getActivity().runOnUiThread(() -> {
+                pbLoadingInstalled.setVisibility(View.GONE);
+                rvInstalledApps.setVisibility(View.VISIBLE);
+                adapter.setItems(items);
+
+                if (items.isEmpty() && isAdded() && getContext() != null) {
+                    Toast.makeText(getContext(),
+                            failure == null
+                                    ? "No apps returned by the system. Reopen this screen once."
+                                    : "Could not read the app list (" + failure + ")",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
         });
     }
 

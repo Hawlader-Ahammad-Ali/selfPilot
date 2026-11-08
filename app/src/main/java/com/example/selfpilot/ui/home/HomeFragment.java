@@ -137,7 +137,7 @@ public class HomeFragment extends Fragment {
 
             // 1. App Usage Stats (Study vs Non-Study)
             Map<String, UsageStats> statsMap = UsageUtil.getUsageStats(context, startOfDay, now);
-            long totalMillis = 0;
+            long appSumMillis = 0;
             long studyMillis = 0;
             long nonStudyMillis = 0;
 
@@ -152,7 +152,7 @@ public class HomeFragment extends Fragment {
                 for (Map.Entry<String, UsageStats> entry : statsMap.entrySet()) {
                     long time = entry.getValue().getTotalTimeInForeground();
                     if (time > 0) {
-                        totalMillis += time;
+                        appSumMillis += time;
                         Boolean isStudy = studyMap.get(entry.getKey());
                         if (isStudy != null && isStudy) {
                             studyMillis += time;
@@ -161,6 +161,17 @@ public class HomeFragment extends Fragment {
                         }
                     }
                 }
+            }
+
+            // Headline screen time comes from the device's own screen on/off events, so it
+            // matches what the phone reports instead of a sum of overlapping app windows.
+            long totalMillis = UsageUtil.getScreenOnMillis(context, startOfDay, now);
+            if (totalMillis <= 0) totalMillis = appSumMillis;
+
+            // The study/other split still comes from per-app stats; keep it inside the total.
+            if (studyMillis + nonStudyMillis > totalMillis) {
+                long overflow = studyMillis + nonStudyMillis - totalMillis;
+                nonStudyMillis = Math.max(0L, nonStudyMillis - overflow);
             }
 
             long totalMins = totalMillis / 60000;

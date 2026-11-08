@@ -1,9 +1,11 @@
 package com.example.selfpilot.ui.apps;
 
 import android.app.usage.UsageStats;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -94,12 +96,14 @@ public class AppsFragment extends Fragment {
     }
 
     private void loadApps() {
+        final Context appContext = requireContext().getApplicationContext();
         executorService.execute(() -> {
-            PackageManager pm = requireContext().getPackageManager();
-            List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(requireContext());
+          try {
+            PackageManager pm = appContext.getPackageManager();
+            List<ApplicationInfo> installedApps = UsageUtil.getInstalledApps(appContext);
             AppInfoDao dao = db.appInfoDao();
 
-            String ownPackage = requireContext().getPackageName();
+            String ownPackage = appContext.getPackageName();
 
             Calendar calendar = Calendar.getInstance();
             calendar.set(Calendar.HOUR_OF_DAY, 0);
@@ -108,7 +112,7 @@ public class AppsFragment extends Fragment {
             calendar.set(Calendar.MILLISECOND, 0);
             long startOfDay = calendar.getTimeInMillis();
             
-            todayUsageStats = UsageUtil.getUsageStats(requireContext(), startOfDay, System.currentTimeMillis());
+            todayUsageStats = UsageUtil.getUsageStats(appContext, startOfDay, System.currentTimeMillis());
             if (todayUsageStats == null) {
                 todayUsageStats = new HashMap<>();
             }
@@ -117,12 +121,16 @@ public class AppsFragment extends Fragment {
                 // Exclude SelfPilot itself
                 if (appInfo.packageName.equals(ownPackage)) continue;
 
-                String packageName = appInfo.packageName;
-                String appName = appInfo.loadLabel(pm).toString();
+                // One package with broken resources must not abort the whole list.
+                try {
+                    String packageName = appInfo.packageName;
+                    String appName = UsageUtil.safeLabel(pm, appInfo);
 
-                AppInfoEntity existing = dao.getAppInfo(packageName);
-                if (existing == null) {
-                    dao.insert(new AppInfoEntity(packageName, appName, false));
+                    AppInfoEntity existing = dao.getAppInfo(packageName);
+                    if (existing == null) {
+                        dao.insert(new AppInfoEntity(packageName, appName, false));
+                    }
+                } catch (Throwable ignored) {
                 }
             }
 
@@ -131,6 +139,17 @@ public class AppsFragment extends Fragment {
             if (getActivity() != null) {
                 getActivity().runOnUiThread(this::applyFilters);
             }
+          } catch (Throwable t) {
+            // Never leave the screen blank: show whatever is already stored.
+            Log.w("SELF_PILOT_FREEZER", "[APPS] load failed", t);
+            try {
+                masterAppList = db.appInfoDao().getAllApps();
+            } catch (Throwable ignored) {
+            }
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(this::applyFilters);
+            }
+          }
         });
     }
 

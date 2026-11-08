@@ -241,7 +241,7 @@ public class AppFreezerActivity extends AppCompatActivity {
         List<ApplicationInfo> selectedAppInfos = new ArrayList<>();
 
         for (ApplicationInfo app : eligibleApps) {
-            String label = app.loadLabel(pm).toString();
+            String label = UsageUtil.safeLabel(pm, app);
             CheckBox cb = new CheckBox(this);
             cb.setText(label + " (" + app.packageName + ")");
             cb.setTag(app);
@@ -292,7 +292,7 @@ public class AppFreezerActivity extends AppCompatActivity {
                         
                         for (ApplicationInfo info : selectedAppInfos) {
                             String pkg = info.packageName;
-                            String name = info.loadLabel(pm).toString();
+                            String name = UsageUtil.safeLabel(pm, info);
 
                             if (useShizuku) {
                                 boolean success = ShizukuUtil.freezeApp(pkg);
