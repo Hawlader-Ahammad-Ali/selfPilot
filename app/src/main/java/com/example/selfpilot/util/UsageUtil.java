@@ -93,6 +93,138 @@ public class UsageUtil {
     }
 
     /**
+     * Time some app was actually in the foreground - the definition the phone's own
+     * "Screen time" screen uses.
+     *
+     * A straight sum of per-app foreground time overlaps (split screen, picture-in-picture),
+     * and plain screen-on time also counts the lock screen and always-on display, which is why
+     * SelfPilot used to report ~30 minutes more than the device. Here the window is rebuilt as
+     * one timeline: an app resuming opens a segment, the same app pausing closes it. Segments
+     * therefore never overlap and never cover the lock screen.
+     */
+    public static long getForegroundMillis(Context context, long start, long end) {
+        if (context == null || end <= start) return 0L;
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return 0L;
+
+        final int EVENT_RESUME = UsageEvents.Event.MOVE_TO_FOREGROUND;   // 1
+        final int EVENT_PAUSE = UsageEvents.Event.MOVE_TO_BACKGROUND;    // 2
+
+        long total = 0L;
+        long segmentStart = -1L;
+        String owner = null;
+
+        try {
+            UsageEvents events = usm.queryEvents(start, end);
+            UsageEvents.Event event = new UsageEvents.Event();
+            while (events != null && events.hasNextEvent()) {
+                events.getNextEvent(event);
+                int type = event.getEventType();
+                long ts = Math.min(Math.max(event.getTimeStamp(), start), end);
+                String pkg = event.getPackageName();
+
+                if (type == EVENT_RESUME) {
+                    if (segmentStart >= 0) {
+                        // Hand over from the previous owner without a gap.
+                        total += Math.max(0L, ts - segmentStart);
+                    }
+                    segmentStart = ts;
+                    owner = pkg;
+                } else if (type == EVENT_PAUSE || type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                    if (segmentStart >= 0 && pkg != null && pkg.equals(owner)) {
+                        total += Math.max(0L, ts - segmentStart);
+                        segmentStart = -1L;
+                        owner = null;
+                    }
+                } else if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                    if (segmentStart >= 0) {
+                        total += Math.max(0L, ts - segmentStart);
+                        segmentStart = -1L;
+                        owner = null;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            return Math.max(0L, total);
+        }
+
+        if (segmentStart >= 0) total += Math.max(0L, end - segmentStart);
+        return Math.min(total, Math.max(0L, end - start));
+    }
+
+    /**
+     * Foreground minutes split into the 24 hours of the day starting at {@code start}.
+     *
+     * Uses the same resume/pause timeline as {@link #getForegroundMillis}, so the bars always
+     * add up to the headline number on the Home screen.
+     */
+    public static long[] getHourlyUsage(Context context, long start, long end) {
+        long[] buckets = new long[24];
+        if (context == null || end <= start) return buckets;
+
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return buckets;
+
+        long segmentStart = -1L;
+        String owner = null;
+
+        try {
+            UsageEvents events = usm.queryEvents(start, end);
+            UsageEvents.Event event = new UsageEvents.Event();
+            while (events != null && events.hasNextEvent()) {
+                events.getNextEvent(event);
+                int type = event.getEventType();
+                long ts = Math.min(Math.max(event.getTimeStamp(), start), end);
+                String pkg = event.getPackageName();
+
+                if (type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    if (segmentStart >= 0) {
+                        addSegment(buckets, start, segmentStart, ts);
+                    }
+                    segmentStart = ts;
+                    owner = pkg;
+                } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                        || type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                    if (segmentStart >= 0 && pkg != null && pkg.equals(owner)) {
+                        addSegment(buckets, start, segmentStart, ts);
+                        segmentStart = -1L;
+                        owner = null;
+                    }
+                } else if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE
+                        || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                    if (segmentStart >= 0) {
+                        addSegment(buckets, start, segmentStart, ts);
+                        segmentStart = -1L;
+                        owner = null;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            return buckets;
+        }
+
+        if (segmentStart >= 0) addSegment(buckets, start, segmentStart, end);
+        return buckets;
+    }
+
+    /** Splits one foreground segment across the hour buckets it touches. */
+    private static void addSegment(long[] buckets, long dayStart, long from, long to) {
+        long cursor = Math.max(from, dayStart);
+        long limit = to;
+        int guard = 0;
+        while (cursor < limit && guard++ < 48) {
+            int hour = (int) ((cursor - dayStart) / 3600000L);
+            if (hour < 0) break;
+            if (hour > 23) break;
+            long hourEnd = dayStart + (hour + 1) * 3600000L;
+            long partEnd = Math.min(limit, hourEnd);
+            if (partEnd > cursor) buckets[hour] += partEnd - cursor;
+            cursor = partEnd > cursor ? partEnd : cursor + 1;
+        }
+    }
+
+    /**
      * Real screen-on time for the window, measured from the device's own
      * SCREEN_INTERACTIVE / SCREEN_NON_INTERACTIVE events (and keyguard events).
      *

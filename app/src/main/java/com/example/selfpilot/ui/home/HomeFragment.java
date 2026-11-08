@@ -163,9 +163,13 @@ public class HomeFragment extends Fragment {
                 }
             }
 
-            // Headline screen time comes from the device's own screen on/off events, so it
-            // matches what the phone reports instead of a sum of overlapping app windows.
-            long totalMillis = UsageUtil.getScreenOnMillis(context, startOfDay, now);
+            // Headline screen time is rebuilt from the app timeline (resume/pause), which is
+            // exactly how the phone's own screen-time screen counts it: no overlapping
+            // windows, no lock screen. Screen-on time is only a fallback.
+            long totalMillis = UsageUtil.getForegroundMillis(context, startOfDay, now);
+            if (totalMillis <= 0) {
+                totalMillis = UsageUtil.getScreenOnMillis(context, startOfDay, now);
+            }
             if (totalMillis <= 0) totalMillis = appSumMillis;
 
             // The study/other split still comes from per-app stats; keep it inside the total.

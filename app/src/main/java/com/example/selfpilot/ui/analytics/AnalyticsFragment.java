@@ -416,6 +416,11 @@ public class AnalyticsFragment extends Fragment {
             final int finalHonorAvg = honorScoreAvg;
             final int finalGoalPercent = goalAchievedPercent;
             final long finalProductiveMillis = productiveMillis;
+            // Same definition as Home: one non-overlapping app timeline, so the two screens
+            // can never disagree about how long the phone was used.
+            long timelineMillis = UsageUtil.getForegroundMillis(safeContext, startMillis, now);
+            if (timelineMillis > 0) totalScreenMillis = timelineMillis;
+
             final long finalScreenMillis = totalScreenMillis;
 
             final List<BarEntry> barEntries = new ArrayList<>();
