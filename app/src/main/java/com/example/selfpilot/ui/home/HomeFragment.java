@@ -143,7 +143,7 @@ public class HomeFragment extends Fragment {
             long now = System.currentTimeMillis();
 
             // 1. App Usage Stats (Study vs Non-Study)
-            Map<String, UsageStats> statsMap = UsageUtil.getUsageStats(context, startOfDay, now);
+            Map<String, UsageStats> statsMap = UsageUtil.getUsageStatsResilient(context, startOfDay, now);
             long appSumMillis = 0;
             long studyMillis = 0;
             long nonStudyMillis = 0;
@@ -260,7 +260,7 @@ public class HomeFragment extends Fragment {
 
             long now = System.currentTimeMillis();
             long sevenDaysAgo = now - (7 * 86400000L);
-            Map<String, UsageStats> stats = UsageUtil.getUsageStats(context, sevenDaysAgo, now);
+            Map<String, UsageStats> stats = UsageUtil.getUsageStatsResilient(context, sevenDaysAgo, now);
 
             long total7DaysMillis = 0;
             if (stats != null) {

@@ -405,4 +405,31 @@ public class UsageUtil {
             return null;
         }
     }
+
+    /** Never-empty usage map: some ROMs answer queryAndAggregateUsageStats with nothing. */
+    public static Map<String, UsageStats> getUsageStatsResilient(Context context, long start, long end) {
+        Map<String, UsageStats> map = getUsageStats(context, start, end);
+        if (map != null && !map.isEmpty()) return map;
+        Map<String, UsageStats> fallback = new java.util.HashMap<>();
+        try {
+            UsageStatsManager usm =
+                    (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+            List<UsageStats> raw = usm == null ? null
+                    : usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end);
+            if (raw != null) {
+                for (UsageStats stats : raw) {
+                    if (stats == null) continue;
+                    String pkg = stats.getPackageName();
+                    if (pkg == null) continue;
+                    UsageStats existing = fallback.get(pkg);
+                    if (existing == null || stats.getTotalTimeInForeground()
+                            > existing.getTotalTimeInForeground()) {
+                        fallback.put(pkg, stats);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
 }

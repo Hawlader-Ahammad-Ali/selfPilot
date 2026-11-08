@@ -164,6 +164,17 @@ public class AccountActivity extends AppCompatActivity {
     // Rendering
     // ------------------------------------------------------------------------------------
 
+    /** Shown on the screen so it is obvious which build is installed. */
+    private String appVersion() {
+        try {
+            String version = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0).versionName;
+            return version == null ? "?" : version;
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
     private void refreshUi() {
         AccountSession session = AccountSession.load(this);
         boolean signedIn = session.isSignedIn();
@@ -188,7 +199,7 @@ public class AccountActivity extends AppCompatActivity {
         switchAutoBackup.setChecked(PrivacySettings.autoBackup(this));
         switchRealtime.setChecked(PrivacySettings.realtimeSync(this));
         tvLeaderboardMode.setText(leaderboardModeLabel(PrivacySettings.leaderboardMode(this)));
-        String status = CloudSyncManager.statusLine(this);
+        String status = "SelfPilot v" + appVersion() + " • " + CloudSyncManager.statusLine(this);
         String lastError = AuthApi.lastError(this);
         if (lastError != null && lastError.length() > 0) {
             // Never let a sign-in failure disappear silently - this line is what to report.
@@ -313,7 +324,12 @@ public class AccountActivity extends AppCompatActivity {
                         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
                         dialog.getButton(AlertDialog.BUTTON_POSITIVE)
                                 .setText(createMode ? "Create" : "Sign in");
-                        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                        // A toast can vanish before it is read - show the reason in a dialog.
+                        new AlertDialog.Builder(this)
+                                .setTitle(createMode ? "Create account" : "Sign in")
+                                .setMessage(message)
+                                .setPositiveButton("OK", null)
+                                .show();
                     }
                 };
 
@@ -346,36 +362,41 @@ public class AccountActivity extends AppCompatActivity {
      * will happen before anything is uploaded; the merge is additive in both directions.
      */
     private void onAuthenticated() {
-        boolean hasLocalData;
-        try {
-            AppDatabase db = AppDatabase.getDatabase(this);
-            hasLocalData = db.honorScoreDao().getTotalStudyPoints() > 0
-                    || !db.restrictionRuleDao().getAllRules().isEmpty()
-                    || db.frozenAppDao().getFrozenCount() > 0;
-        } catch (Exception e) {
-            hasLocalData = false;
-        }
+        io.execute(() -> {
+            boolean hasLocalData;
+            try {
+                AppDatabase db = AppDatabase.getDatabase(this);
+                hasLocalData = db.honorScoreDao().getTotalStudyPoints() > 0
+                        || !db.restrictionRuleDao().getAllRules().isEmpty()
+                        || db.frozenAppDao().getFrozenCount() > 0;
+            } catch (Exception e) {
+                hasLocalData = false;
+            }
 
-        CloudBackupWorker.schedule(this);
-        SessionSyncManager.startListening(this);
+            boolean finalHasLocalData = hasLocalData;
+            runOnUiThread(() -> {
+                CloudBackupWorker.schedule(this);
+                SessionSyncManager.startListening(this);
 
-        if (!hasLocalData) {
-            runMigration();
-            return;
-        }
+                if (!finalHasLocalData) {
+                    runMigration();
+                    return;
+                }
 
-        new AlertDialog.Builder(this)
-                .setTitle("Link this device's data?")
-                .setMessage("Your local progress stays on this phone and is added to your account. "
-                        + "If the account already has a backup, both are merged - nothing is "
-                        + "overwritten.")
-                .setPositiveButton("Link data", (d, w) -> runMigration())
-                .setNegativeButton("Not now", (d, w) -> {
-                    refreshUi();
-                    Toast.makeText(this, "Signed in - local data kept on this device",
-                            Toast.LENGTH_LONG).show();
-                })
-                .show();
+                new AlertDialog.Builder(this)
+                        .setTitle("Link this device's data?")
+                        .setMessage("Your local progress stays on this phone and is added to your account. "
+                                + "If the account already has a backup, both are merged - nothing is "
+                                + "overwritten.")
+                        .setPositiveButton("Link data", (d, w) -> runMigration())
+                        .setNegativeButton("Not now", (d, w) -> {
+                            refreshUi();
+                            Toast.makeText(this, "Signed in - local data kept on this device",
+                                    Toast.LENGTH_LONG).show();
+                        })
+                        .show();
+            });
+        });
     }
 
     private void runMigration() {

@@ -149,7 +149,7 @@ public class RestrictionChecker {
         // 5. Daily limit.
         if (rule != null && rule.limitMinutes > 0) {
             long startOfDay = getStartOfDay();
-            Map<String, UsageStats> statsMap = UsageUtil.getUsageStats(context, startOfDay, now);
+            Map<String, UsageStats> statsMap = UsageUtil.getUsageStatsResilient(context, startOfDay, now);
             int usedMinutes = 0;
             if (statsMap != null) {
                 UsageStats stats = statsMap.get(packageName);

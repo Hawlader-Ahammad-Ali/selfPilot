@@ -97,35 +97,103 @@ public class AuthApi {
     public static void signUp(Context context, String email, String password,
                               String displayName, Callback callback) {
         run(context, callback, () -> {
-            FirebaseAuth auth = FirebaseBoot.auth(context);
-            if (auth == null) return Fail.of("Authentication is unavailable on this device");
+            try {
+                FirebaseAuth auth = FirebaseBoot.auth(context);
+                if (auth != null) {
+                    AuthResult result = Tasks.await(
+                            auth.createUserWithEmailAndPassword(email, password),
+                            TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-            AuthResult result = Tasks.await(
-                    auth.createUserWithEmailAndPassword(email, password),
-                    TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-            FirebaseUser user = result.getUser();
-            if (user != null && displayName != null && !displayName.trim().isEmpty()) {
-                try {
-                    Tasks.await(user.updateProfile(new UserProfileChangeRequest.Builder()
-                            .setDisplayName(displayName)
-                            .build()), TIMEOUT_SECONDS, TimeUnit.SECONDS);
-                    Tasks.await(user.reload(), 10, TimeUnit.SECONDS);
-                    user = auth.getCurrentUser();
-                } catch (Exception ignored) {
+                    FirebaseUser user = result.getUser();
+                    if (user != null && displayName != null && !displayName.trim().isEmpty()) {
+                        try {
+                            Tasks.await(user.updateProfile(new UserProfileChangeRequest.Builder()
+                                    .setDisplayName(displayName)
+                                    .build()), TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                            Tasks.await(user.reload(), 10, TimeUnit.SECONDS);
+                            user = auth.getCurrentUser();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return Ok.of(saveSession(context, user, "password"));
                 }
+                note("SDK auth unavailable for sign-up, using REST");
+            } catch (Exception sdkError) {
+                note("SDK email sign-up failed: " + rootCause(sdkError));
             }
-            return Ok.of(saveSession(context, user, "password"));
+            return restSignUp(context, email, password, displayName);
         });
+    }
+
+    private static Result restSignUp(Context context, String email, String password, String displayName) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("email", email);
+            body.put("password", password);
+            body.put("returnSecureToken", true);
+
+            Http.Response response = Http.post(
+                    CloudConfig.AUTH_BASE + "signUp?key=" + CloudConfig.API_KEY,
+                    body.toString());
+            if (!response.isOk()) {
+                String message = restMessage(response.body);
+                note("REST email sign-up: " + message);
+                return Fail.of(message);
+            }
+            AccountSession session = sessionFromRest(context, response.body, "password");
+            
+            if (displayName != null && !displayName.trim().isEmpty()) {
+                session.displayName = displayName.trim();
+                session.save(context);
+                try {
+                    JSONObject updateBody = new JSONObject();
+                    updateBody.put("idToken", session.idToken);
+                    updateBody.put("displayName", displayName.trim());
+                    updateBody.put("returnSecureToken", true);
+                    Http.post(CloudConfig.AUTH_BASE + "update?key=" + CloudConfig.API_KEY, updateBody.toString());
+                } catch (Exception ignored) {}
+            }
+            return Ok.of(session);
+        } catch (Exception e) {
+            note("REST email sign-up threw: " + rootCause(e));
+            return Fail.of("Network unavailable - check your connection");
+        }
     }
 
     public static void sendPasswordReset(Context context, String email, Callback callback) {
         run(context, callback, () -> {
-            FirebaseAuth auth = FirebaseBoot.auth(context);
-            if (auth == null) return Fail.of("Authentication is unavailable on this device");
-            Tasks.await(auth.sendPasswordResetEmail(email), TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return Ok.plain("Password reset email sent");
+            try {
+                FirebaseAuth auth = FirebaseBoot.auth(context);
+                if (auth != null) {
+                    Tasks.await(auth.sendPasswordResetEmail(email), TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    return Ok.plain("Password reset email sent");
+                }
+            } catch (Exception sdkError) {
+                note("SDK password reset failed: " + rootCause(sdkError));
+            }
+            return restPasswordReset(email);
         });
+    }
+
+    private static Result restPasswordReset(String email) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("requestType", "PASSWORD_RESET");
+            body.put("email", email);
+
+            Http.Response response = Http.post(
+                    CloudConfig.AUTH_BASE + "sendOobCode?key=" + CloudConfig.API_KEY,
+                    body.toString());
+            if (!response.isOk()) {
+                String message = restMessage(response.body);
+                note("REST password reset: " + message);
+                return Fail.of(message);
+            }
+            return Ok.plain("Password reset email sent");
+        } catch (Exception e) {
+            note("REST password reset threw: " + rootCause(e));
+            return Fail.of("Network unavailable - check your connection");
+        }
     }
 
     // ------------------------------------------------------------------------------------

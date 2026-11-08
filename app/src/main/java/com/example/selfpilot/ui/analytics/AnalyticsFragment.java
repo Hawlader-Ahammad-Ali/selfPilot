@@ -334,7 +334,7 @@ public class AnalyticsFragment extends Fragment {
                 }
 
                 // 5. Screen time and app breakdown
-                Map<String, UsageStats> stats = UsageUtil.getUsageStats(safeContext, startMillis, now);
+                Map<String, UsageStats> stats = UsageUtil.getUsageStatsResilient(safeContext, startMillis, now);
                 if (stats != null && !stats.isEmpty()) {
                     long totalMillisForPie = 0;
                     for (UsageStats s : stats.values()) {
