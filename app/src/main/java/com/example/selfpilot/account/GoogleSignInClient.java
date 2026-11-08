@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.credentials.ClearCredentialStateRequest;
 import androidx.credentials.Credential;
 import androidx.credentials.CredentialManager;
@@ -106,11 +107,9 @@ public class GoogleSignInClient {
                         }
 
                         @Override
-                        public void onError(GetCredentialException e) {
-                            Log.w(TAG, "[GOOGLE] Credential Manager failed: type=" + e.getType()
-                                    + " msg=" + e.getMessage(), e);
-                            if (e instanceof GetCredentialCancellationException
-                                    || (e.getType() != null && e.getType().contains("CANCELED"))) {
+                        public void onError(@NonNull GetCredentialException e) {
+                            Log.w(TAG, "[GOOGLE] Credential Manager failed: msg=" + e.getMessage(), e);
+                            if (e instanceof GetCredentialCancellationException) {
                                 finish(callback, false, "Google sign-in cancelled");
                                 return;
                             }
@@ -222,7 +221,7 @@ public class GoogleSignInClient {
     }
 
     private static void exchange(Context context, String idToken, Callback callback) {
-        AuthApi.signInWithGoogle(null, idToken, (success, message) ->
+        AuthApi.signInWithGoogle(context, idToken, (success, message) ->
                 finish(callback, success, message));
     }
 

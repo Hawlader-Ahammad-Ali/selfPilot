@@ -16,6 +16,7 @@ work = "2.9.0"
 credentials = "1.3.0"
 googleid = "1.1.0"
 playservices = "21.2.0"
+firebaseauth = "23.2.1"
 
 [libraries]
 mpandroidchart = { group = "com.github.PhilJay", name = "MPAndroidChart", version.ref = "mpandroidchart" }
@@ -39,6 +40,7 @@ credentials = { group = "androidx.credentials", name = "credentials", version.re
 credentials-play = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 playservices-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playservices" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseauth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

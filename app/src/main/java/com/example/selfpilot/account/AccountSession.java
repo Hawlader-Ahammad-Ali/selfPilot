@@ -79,6 +79,8 @@ public class AccountSession {
      */
     public static void clear(Context context) {
         if (context == null) return;
+        // Drop the SDK session too, otherwise the next getCurrentUser() would still be valid.
+        FirebaseBoot.signOutQuietly();
         context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()

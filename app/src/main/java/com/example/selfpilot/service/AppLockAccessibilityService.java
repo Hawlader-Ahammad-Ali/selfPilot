@@ -19,6 +19,7 @@ import com.example.selfpilot.ui.focus.FocusLockActivity;
 import com.example.selfpilot.util.EmergencyUnlockManager;
 import com.example.selfpilot.util.ExamSessionManager;
 import com.example.selfpilot.util.FocusSessionManager;
+import com.example.selfpilot.util.AudioEnforcer;
 import com.example.selfpilot.util.FrozenAppsManager;
 import com.example.selfpilot.util.RestrictionChecker;
 
@@ -255,6 +256,9 @@ public class AppLockAccessibilityService extends AccessibilityService {
         if (!isBlockable(packageName)) return;
         ensureOverlay();
 
+        // A frozen app must not keep playing audio from the background either.
+        AudioEnforcer.stopPlayback(this, packageName);
+
         boolean alreadyCovered = overlayController.isShowing()
                 && packageName.equals(overlayController.getTargetPackage());
         if (!alreadyCovered) {
@@ -284,6 +288,9 @@ public class AppLockAccessibilityService extends AccessibilityService {
     private void showRestrictionBlock(String packageName, RestrictionChecker.BlockDecision decision) {
         if (!isBlockable(packageName)) return;
         ensureOverlay();
+
+        // Stop the sound the moment the limit is hit, not just the screen.
+        AudioEnforcer.stopPlayback(this, packageName);
 
         String badge;
         String message;

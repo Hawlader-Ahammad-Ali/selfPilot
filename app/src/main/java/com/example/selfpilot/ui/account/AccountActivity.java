@@ -247,9 +247,18 @@ public class AccountActivity extends AppCompatActivity {
 
     private void startGoogleSignIn() {
         GoogleSignInClient.signIn(this, (success, message) -> {
-            if (isFinishing()) return;
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-            if (success) onAuthenticated();
+            if (isFinishing() || isDestroyed()) return;
+            if (success) {
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+                onAuthenticated();
+            } else {
+                // Show the exact reason instead of a toast that disappears before it is read.
+                new AlertDialog.Builder(this)
+                        .setTitle("Google sign-in")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show();
+            }
         });
     }
 

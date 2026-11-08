@@ -25,9 +25,11 @@ import com.example.selfpilot.MainActivity;
 import com.example.selfpilot.data.AppDatabase;
 import com.example.selfpilot.data.FrozenAppEntity;
 import com.example.selfpilot.receiver.GuardianRestartReceiver;
+import com.example.selfpilot.util.AudioEnforcer;
 import com.example.selfpilot.util.ExamSessionManager;
 import com.example.selfpilot.util.FocusSessionManager;
 import com.example.selfpilot.util.FrozenAppsManager;
+import com.example.selfpilot.util.RestrictionChecker;
 import com.example.selfpilot.util.ShizukuUtil;
 
 import java.util.List;
@@ -59,6 +61,8 @@ public class GuardianService extends Service {
     private static final int ALERT_NOTIFICATION_ID = 2002;
 
     private static final long TICK_INTERVAL_MS = 30_000L;
+    /** Music must stop within a few seconds of a limit expiring. */
+    private static final long MEDIA_GUARD_INTERVAL_MS = 15_000L;
     /** Deep maintenance (DB purge, Shizuku re-freeze) every Nth tick. */
     private static final int MAINTENANCE_EVERY_N_TICKS = 20; // ~10 minutes
     private static final long ALERT_REPEAT_MS = 10 * 60 * 1000L;
@@ -189,6 +193,7 @@ public class GuardianService extends Service {
         if (!ticking) {
             ticking = true;
             handler.post(tickRunnable);
+            handler.post(mediaGuardRunnable);
         }
 
         // Do the cheap critical work immediately on every start.
@@ -229,6 +234,50 @@ public class GuardianService extends Service {
     // ------------------------------------------------------------------------------------
     // Periodic maintenance
     // ------------------------------------------------------------------------------------
+
+    /**
+     * Playback guard.
+     *
+     * Blocking the screen does not stop sound: a music app whose limit just ran out keeps
+     * playing from the background. This runs four times a minute, and any restricted package
+     * that still owns a playing media session is paused immediately.
+     */
+    private final Runnable mediaGuardRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!ticking) return;
+            try {
+                executor.execute(GuardianService.this::runMediaGuard);
+            } catch (Throwable t) {
+                Log.w(TAG, "[GUARDIAN] media guard could not be queued", t);
+            }
+            if (ticking) {
+                handler.postDelayed(this, MEDIA_GUARD_INTERVAL_MS);
+            }
+        }
+    };
+
+    private void runMediaGuard() {
+        try {
+            List<String> playing = AudioEnforcer.playingPackages(this);
+            if (playing.isEmpty()) return;
+
+            for (String packageName : playing) {
+                try {
+                    RestrictionChecker.BlockDecision decision =
+                            RestrictionChecker.evaluate(this, packageName);
+                    if (!decision.isBlocked()) continue;
+
+                    AudioEnforcer.stopPlayback(this, packageName);
+                    Log.i(TAG, "[GUARDIAN] Stopped background audio of blocked app "
+                            + packageName + " (" + decision.reason + ")");
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "[GUARDIAN] media guard failed", t);
+        }
+    }
 
     private void runTick() {
         tickCounter++;
